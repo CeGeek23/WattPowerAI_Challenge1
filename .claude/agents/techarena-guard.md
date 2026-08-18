@@ -144,9 +144,16 @@ neuf installé uniquement depuis `requirements.txt`** — pas depuis
 l'environnement de développement :
 
 ```bash
-python -m venv /tmp/ta_venv && /tmp/ta_venv/bin/pip -q install -r requirements.txt
-/tmp/ta_venv/bin/python validate_submission.py
+./scripts/check_env.sh 3.11 3.12
 ```
+
+Ce script bâtit un environnement neuf par version de Python avec **uv**, depuis
+`requirements.txt` seul, vérifie que **tout import tiers de `my_model/` s'y
+résout** puis lance `validate_submission.py`. Tester plusieurs versions n'est
+pas du zèle : la version de Python des organisateurs est un `<<TODO>>` non
+résolu dans les instructions. Si `uv` manque :
+`curl -LsSf https://astral.sh/uv/install.sh | sh` (Windows :
+`winget install --id astral-sh.uv`).
 
 Un `SUBMISSION READY` prouve que le code tourne de bout en bout, **pas** que le
 modèle est bon : `sample_data/` ne contient que 2 cellules synthétiques. Ne

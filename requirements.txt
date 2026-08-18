@@ -1,4 +1,18 @@
-# Add every package your solution needs (pip-installable, pinned versions
-# recommended).
+# Toute dependance de my_model/ doit figurer ici : c'est le SEUL fichier que
+# les organisateurs installent, dans leur propre environnement propre.
+#
+# Workflow uv - ce fichier reste la source de verite :
+#   uv pip install <paquet>        installe dans .venv
+#   <ajouter la ligne ci-dessous>  a la main, sinon la notation echouera
+#   ./scripts/check_env.sh         verifie qu'un env neuf bati depuis ce seul
+#                                  fichier suffit a faire tourner le modele
+#
+# Ne pas utiliser `uv add` : cela cree un pyproject.toml concurrent, donc une
+# seconde source de verite qui derivera de celle-ci.
+#
+# Versions epinglees recommandees par les organisateurs, MAIS leur version de
+# Python n'est pas publiee (<<TODO>> dans les instructions) : garder des
+# planchers larges sur les paquets de base, epingler surtout les paquets
+# lourds (torch, ...) une fois le modele stabilise.
 numpy>=1.24
 pandas>=2.0

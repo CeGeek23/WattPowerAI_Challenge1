@@ -58,7 +58,13 @@ class MyModel:
   des garde-fous locaux, pas la limite du concours.
 - Graines aléatoires fixées, résultat reproductible.
 - Toute dépendance importée doit être dans `requirements.txt`, et la validation
-  se fait dans un **venv neuf installé uniquement depuis ce fichier**.
+  se fait dans un **environnement neuf bâti uniquement depuis ce fichier**.
+  L'outil est **uv**, le format reste `requirements.txt` : `uv pip install <pkg>`
+  puis on ajoute la ligne à la main. **Jamais `uv add`** — un `pyproject.toml`
+  créerait une seconde source de vérité, et les organisateurs n'installent que
+  `requirements.txt`.
+  Contrôle complet : `./scripts/check_env.sh 3.11 3.12` (env neuf par version,
+  imports de `my_model/` résolus, `validate_submission.py`).
 
 ## Conventions du dépôt
 
