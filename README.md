@@ -16,9 +16,48 @@ team_submission_template/
 |-- validate_submission.py   run this before every submission
 |-- sample_data/             tiny synthetic cells for the dry run
 |-- sample_input.csv         example evaluation input for the dry run
+|-- scripts/                 get_dataset.sh / pack_dataset.sh (voir "Dataset" ci-dessous)
+|-- dataset/                 données réelles - récupérées via scripts/get_dataset.sh, hors git
 |-- requirements.txt         add your dependencies here
 |-- README.md                replace with a description of your approach
 ```
+
+## Dataset (à récupérer, pas dans git)
+
+Les données de mesure ne sont pas versionnées : 559 MB extraits, 107 MB
+d'archives. Elles sont publiées en **assets de la release `dataset-v1`** de
+ce repo (privé), ce qui garde le clone à ~250 KB et ne consomme aucun quota
+Git LFS.
+
+```bash
+git clone git@github.com:CeGeek23/WattPowerAI_Challenge1.git
+cd WattPowerAI_Challenge1
+./scripts/get_dataset.sh            # -> dataset/ : 6 cellules, 65 CSV, + le PDF du sujet
+```
+
+| commande | effet |
+|---|---|
+| `./scripts/get_dataset.sh` | toutes les cellules (107 MB à télécharger) |
+| `./scripts/get_dataset.sh 102Ah_45degC_1C_cell1` | une seule cellule (10 MB) |
+| `FORCE=1 ./scripts/get_dataset.sh` | réextrait même si `dataset/` existe déjà |
+
+Chaque archive est vérifiée contre le `SHA256SUMS` de la release, et
+retéléchargée automatiquement si le cache local est corrompu. Les archives
+restent dans `.dataset_cache/` (ignoré par git, supprimable).
+
+**Accès** - il faut être collaborateur du repo privé, puis au choix :
+
+- **GitHub CLI** : `brew install gh` (ou `winget install GitHub.cli`,
+  `apt install gh`) puis `gh auth login` ;
+- **sans rien installer** : un token classic avec le scope `repo`
+  ([settings/tokens](https://github.com/settings/tokens)), puis
+  `export GITHUB_TOKEN=ghp_...` - le script bascule tout seul sur curl.
+
+Sous Windows : Git Bash ou WSL.
+
+Pour republier le dataset après modification :
+`PUBLISH=1 ./scripts/pack_dataset.sh` (repacke les 6 archives, recalcule les
+checksums, met à jour la release).
 
 ## Run model - 3 input arguments
 
