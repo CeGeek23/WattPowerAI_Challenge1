@@ -1,65 +1,47 @@
 # ===========================================================================
-#  DEPENDANCES DE LA SOUMISSION - le SEUL fichier installe par les
-#  organisateurs, dans leur propre environnement propre.
+#  Le SEUL fichier installe par les organisateurs, dans leur environnement.
 #
-#  Regle : une ligne ici = un paquet reellement importe par my_model/.
-#  Le materiel d'exploration (notebooks, courbes, tuning) va dans
-#  requirements-dev.txt, qui n'est PAS livre.
-#  Pourquoi cette separation : leur machine est un Windows Server 2022 et
-#  leur version de Python n'est pas publiee (<<TODO>> des instructions). Un
-#  paquet lourd declare ici mais inutilise ne peut rien gagner, et peut
-#  faire echouer l'installation a l'intake.
-# ---------------------------------------------------------------------------
-#  Workflow uv (uv est l'outil, ce fichier reste le format et la verite)
-# ---------------------------------------------------------------------------
-#   uv venv                                 une seule fois, cree .venv
-#   uv pip install -r requirements.txt      synchroniser (ex. apres un git pull)
-#   uv pip install -r requirements-dev.txt  + l'outillage d'exploration
+#   uv pip install -r requirements.txt     synchroniser .venv
+#   uv run python run_model.py --model train --input dataset --output-dir output
+#   Ajouter un paquet = uv pip install <pkg>  PUIS ajouter la ligne ici.
+#   (`uv venv` cree l'env, il ne l'active pas ; `uv run` rend l'activation
+#    inutile. Sinon : source .venv/bin/activate.)
 #
-#   `uv venv` CREE l'environnement, il ne l'ACTIVE pas - aucune commande ne
-#   peut activer un venv depuis un sous-processus. Avec `uv run` ci-dessous,
-#   l'activation est inutile : uv prend .venv tout seul. Si vous voulez quand
-#   meme un prompt active :  source .venv/bin/activate   (Windows Git Bash :
-#   source .venv/Scripts/activate). Et si .venv existe deja, `uv venv` refuse
-#   de l'ecraser : passez simplement a la ligne suivante.
-#
-#   uv run python run_model.py --model train --input dataset  --output-dir output
-#   uv run python run_model.py --model test  --input sample_input.csv --output-dir output
-#
-#   Ajouter une dependance = DEUX gestes :
-#     uv pip install scikit-learn           1. installer dans .venv
-#     scikit-learn>=1.3                     2. ajouter la ligne ici, a la main
-#
-#   ./scripts/check_env.sh 3.11 3.12        filet de securite : env neuf par
-#     version de Python, bati depuis ce seul fichier, verifie que tout import
-#     de my_model/ s'y resout, puis lance validate_submission.py. A lancer
-#     avant chaque commit et avant la soumission.
-#
-#   NE PAS utiliser `uv add` : cela cree un pyproject.toml concurrent, donc une
-#   seconde liste de dependances qui derivera de celle-ci.
-#
-#   Versions : planchers larges (la version de Python des organisateurs est
-#   inconnue), epingler les paquets lourds une fois le modele fige.
+#  AVANT LA SOUMISSION : supprimer d'ici tout ce que my_model/ n'importe pas.
+#  Leur machine est un Windows Server 2022 et leur version de Python n'est pas
+#  publiee ; un paquet inutilise ne peut rien gagner et peut faire echouer
+#  l'installation a l'intake.
 # ===========================================================================
 
-# --- socle, utilise par le framework lui-meme ---
+# --- socle (utilise par le framework lui-meme) ---
 numpy>=1.24
 pandas>=2.0
 
-# --- ajuste de courbes de fade, lissage, interpolation, optimisation ---
-scipy>=1.10
+# --- modelisation ---
+scipy>=1.10                # ajuste de courbes de fade, lissage, optimisation
+scikit-learn>=1.3          # extrapolation entre points de fonctionnement, GPR
+lightgbm>=4.0              # gradient boosting sur features par cycle
+xgboost>=2.0               # alternative
+statsmodels>=0.14          # regression, series temporelles, intervalles
+optuna>=3.4                # recherche d'hyperparametres
+joblib>=1.3                # parallelisation, cache disque des features
 
-# --- regression / extrapolation entre points de fonctionnement
-#     (GPR, ridge, splines, validation croisee) ---
-scikit-learn>=1.3
+# --- exploration et visualisation ---
+matplotlib>=3.7            # courbes SOH vs cycle, residus, ICA/dQ-dV
+seaborn>=0.13              # comparaisons entre cellules/conditions
+plotly>=5.18               # courbes interactives (zoom cycle, survol)
+jupyterlab>=4.0            # notebooks d'analyse
+ipykernel>=6.25            # noyau VS Code / Jupyter
+ipywidgets>=8.1            # sliders pour explorer les cycles
 
-# ---------------------------------------------------------------------------
-#  A DECOMMENTER SEULEMENT quand my_model/ importe reellement le paquet.
-#  ./scripts/check_env.sh vous le rappellera si vous oubliez.
-# ---------------------------------------------------------------------------
-# lightgbm>=4.0          # gradient boosting sur features par cycle
-# xgboost>=2.0           # idem
-# torch>=2.1             # encodeurs de sequences, poids pre-entrainees
-#                        # -> livrer les poids DANS my_model/, jamais de
-#                        #    telechargement pendant fit()
-# pyarrow>=14.0          # si vous mettez en cache les CSV en parquet
+# --- lecture des 559 Mo de CSV ---
+pyarrow>=14.0              # moteur CSV rapide, cache en parquet
+tqdm>=4.66                 # barres de progression
+
+# --- qualite ---
+pytest>=7.4
+ruff>=0.1
+
+# --- decommenter si vous partez sur du deep learning (~2.5 Go) ---
+#   les poids pre-entraines se livrent DANS my_model/, aucun reseau pendant fit()
+# torch>=2.1
