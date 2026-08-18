@@ -1,0 +1,42 @@
+# ===========================================================================
+#  OUTILLAGE LOCAL - N'EST PAS LIVRE AUX ORGANISATEURS.
+#
+#  Tout ce qui sert a explorer, tracer, valider, tuner. Rien ici ne doit
+#  etre importe par my_model/ : si votre modele finit par en dependre,
+#  DEPLACEZ la ligne dans requirements.txt, sinon la notation officielle
+#  echouera avec un ModuleNotFoundError.
+#  ./scripts/check_env.sh detecte exactement cet oubli.
+#
+#      uv pip install -r requirements-dev.txt
+# ===========================================================================
+-r requirements.txt
+
+# --- exploration et visualisation ---
+matplotlib>=3.7            # courbes SOH vs cycle, residus, ICA/dQ-dV
+seaborn>=0.13              # comparaisons entre cellules/conditions
+plotly>=5.18               # courbes interactives (zoom sur un cycle, survol)
+# kaleido>=0.2             # decommenter pour exporter les figures plotly en PNG
+jupyterlab>=4.0            # notebooks d'analyse
+ipykernel>=6.25            # noyau pour VS Code / Jupyter
+ipywidgets>=8.1            # sliders pour explorer les cycles
+
+# --- lecture rapide des 559 Mo de CSV ---
+pyarrow>=14.0              # moteur CSV rapide + cache en parquet
+tqdm>=4.66                 # barres de progression sur les boucles par cellule
+
+# --- modelisation candidate (a promouvoir dans requirements.txt si utilisee) ---
+statsmodels>=0.14          # regression, series temporelles, intervalles
+
+# --- selection de modele et reglage ---
+optuna>=3.4                # recherche d'hyperparametres
+joblib>=1.3                # parallelisation et cache disque des features
+
+# --- qualite du code de recherche ---
+pytest>=7.4                # tests de votre schema de validation
+ruff>=0.1                  # lint rapide
+
+# --- apprentissage profond : DECOMMENTER si vous partez sur cette voie ---
+#   ~2.5 Go de telechargement. Si my_model/ finit par importer torch, la
+#   ligne doit AUSSI passer dans requirements.txt, et les poids
+#   pre-entraines doivent etre livres dans my_model/ (aucun reseau pendant fit).
+# torch>=2.1

@@ -1,11 +1,20 @@
-# Toute dependance de my_model/ doit figurer ici : c'est le SEUL fichier que
-# les organisateurs installent, dans leur propre environnement propre.
+# ===========================================================================
+#  DEPENDANCES DE LA SOUMISSION - le SEUL fichier installe par les
+#  organisateurs, dans leur propre environnement propre.
 #
+#  Regle : une ligne ici = un paquet reellement importe par my_model/.
+#  Le materiel d'exploration (notebooks, courbes, tuning) va dans
+#  requirements-dev.txt, qui n'est PAS livre.
+#  Pourquoi cette separation : leur machine est un Windows Server 2022 et
+#  leur version de Python n'est pas publiee (<<TODO>> des instructions). Un
+#  paquet lourd declare ici mais inutilise ne peut rien gagner, et peut
+#  faire echouer l'installation a l'intake.
 # ---------------------------------------------------------------------------
-# Workflow uv (uv est l'outil, ce fichier reste le format et la verite)
+#  Workflow uv (uv est l'outil, ce fichier reste le format et la verite)
 # ---------------------------------------------------------------------------
 #   uv venv                                 une seule fois, cree .venv
 #   uv pip install -r requirements.txt      synchroniser (ex. apres un git pull)
+#   uv pip install -r requirements-dev.txt  + l'outillage d'exploration
 #
 #   `uv venv` CREE l'environnement, il ne l'ACTIVE pas - aucune commande ne
 #   peut activer un venv depuis un sous-processus. Avec `uv run` ci-dessous,
@@ -27,12 +36,30 @@
 #     avant chaque commit et avant la soumission.
 #
 #   NE PAS utiliser `uv add` : cela cree un pyproject.toml concurrent, donc une
-#   seconde liste de dependances qui derivera de celle-ci. Les organisateurs
-#   n'installent que requirements.txt.
+#   seconde liste de dependances qui derivera de celle-ci.
 #
-#   Versions : planchers larges sur les paquets de base (la version de Python
-#   des organisateurs n'est pas publiee, c'est un <<TODO>> des instructions),
-#   epingler surtout les paquets lourds (torch, ...) une fois le modele fige.
-# ---------------------------------------------------------------------------
+#   Versions : planchers larges (la version de Python des organisateurs est
+#   inconnue), epingler les paquets lourds une fois le modele fige.
+# ===========================================================================
+
+# --- socle, utilise par le framework lui-meme ---
 numpy>=1.24
 pandas>=2.0
+
+# --- ajuste de courbes de fade, lissage, interpolation, optimisation ---
+scipy>=1.10
+
+# --- regression / extrapolation entre points de fonctionnement
+#     (GPR, ridge, splines, validation croisee) ---
+scikit-learn>=1.3
+
+# ---------------------------------------------------------------------------
+#  A DECOMMENTER SEULEMENT quand my_model/ importe reellement le paquet.
+#  ./scripts/check_env.sh vous le rappellera si vous oubliez.
+# ---------------------------------------------------------------------------
+# lightgbm>=4.0          # gradient boosting sur features par cycle
+# xgboost>=2.0           # idem
+# torch>=2.1             # encodeurs de sequences, poids pre-entrainees
+#                        # -> livrer les poids DANS my_model/, jamais de
+#                        #    telechargement pendant fit()
+# pyarrow>=14.0          # si vous mettez en cache les CSV en parquet
