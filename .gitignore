@@ -19,3 +19,5 @@ validation_report.txt
 .DS_Store
 # dataset fetched from the GitHub release, not from git
 .dataset_cache/
+# cache parquet de l analyse exploratoire (regenerable)
+analysis/.cache/
