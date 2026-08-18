@@ -10,7 +10,7 @@
 # Accès (repo privé) - au choix :
 #   a) GitHub CLI : brew install gh (ou winget/apt) puis  gh auth login
 #   b) sans rien installer :  export GITHUB_TOKEN=ghp_...  (token classic, scope "repo",
-#      créé sur https://github.com/settings/tokens) - curl + python3 suffisent.
+#      créé sur https://github.com/settings/tokens) - curl + awk suffisent.
 # Dans les deux cas il faut être collaborateur du repo.
 set -euo pipefail
 
@@ -38,20 +38,26 @@ if [ -z "$REPO" ]; then
 fi
 
 # --- backend : gh si dispo et authentifié, sinon curl + GITHUB_TOKEN ---
+# (le mode curl n'a besoin que de curl + awk : disponibles partout, Git Bash inclus)
 BACKEND=""
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   BACKEND=gh
-elif [ -n "${GITHUB_TOKEN:-}" ] && command -v curl >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+elif [ -n "${GITHUB_TOKEN:-}" ] && command -v curl >/dev/null 2>&1; then
   BACKEND=curl
 else
-  cat >&2 <<'MSG'
-error: aucun accès GitHub utilisable. Deux options :
-  1) GitHub CLI :  brew install gh   (ou winget install GitHub.cli / apt install gh)
-                   gh auth login
-  2) Token      :  export GITHUB_TOKEN=ghp_...   (classic, scope "repo")
-                   https://github.com/settings/tokens
-Il faut aussi être collaborateur de ce repo privé (demande une invitation à l'owner).
-MSG
+  echo "error: aucun accès GitHub utilisable." >&2
+  if command -v gh >/dev/null 2>&1; then
+    echo "  gh est installé mais pas authentifié -> lance :  gh auth login" >&2
+  else
+    echo "  Option 1 - GitHub CLI :" >&2
+    echo "    Windows : winget install --id GitHub.cli   puis ROUVRE Git Bash" >&2
+    echo "    macOS   : brew install gh        Linux : sudo apt install gh" >&2
+    echo "    puis :    gh auth login" >&2
+  fi
+  echo "  Option 2 - token, rien à installer :" >&2
+  echo "    cree un token classic scope \"repo\" sur https://github.com/settings/tokens" >&2
+  echo "    puis :    export GITHUB_TOKEN=ghp_xxx    &&   bash scripts/get_dataset.sh" >&2
+  echo "  Dans les deux cas il faut être collaborateur de ce repo privé." >&2
   exit 1
 fi
 
@@ -67,8 +73,10 @@ download() { # $1 = nom d'asset -> $CACHE/$1
     gh release download "$TAG" --repo "$REPO" --pattern "$1" --dir "$CACHE" --clobber
   else
     local id
-    id=$(api "/repos/$REPO/releases/tags/$TAG" | python3 -c \
-      'import json,sys; a=json.load(sys.stdin)["assets"]; n=sys.argv[1]; print(next((x["id"] for x in a if x["name"]==n), ""))' "$1")
+    # id numerique de l'asset : dans chaque objet asset, "id" precede "name"
+    id=$(api "/repos/$REPO/releases/tags/$TAG" | awk -v n="$1" '
+      /^[[:space:]]*"id":[[:space:]]*[0-9]+,?$/ { gsub(/[^0-9]/, "", $0); last = $0 }
+      index($0, "\"name\": \"" n "\"")        { print last; exit }')
     [ -n "$id" ] || { echo "  ! asset $1 introuvable dans la release $TAG" >&2; return 1; }
     curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
          -o "$CACHE/$1.part" "https://api.github.com/repos/$REPO/releases/assets/$id"
