@@ -16,7 +16,7 @@ team_submission_template/
 |-- validate_submission.py   run this before every submission
 |-- sample_data/             tiny synthetic cells for the dry run
 |-- sample_input.csv         example evaluation input for the dry run
-|-- scripts/                 get_dataset.sh / pack_dataset.sh (voir "Dataset" ci-dessous)
+|-- scripts/get_dataset.sh   recupere les donnees (voir "Dataset" ci-dessous)
 |-- dataset/                 données réelles - récupérées via scripts/get_dataset.sh, hors git
 |-- requirements.txt         add your dependencies here
 |-- README.md                replace with a description of your approach
@@ -54,10 +54,6 @@ restent dans `.dataset_cache/` (ignoré par git, supprimable).
   `export GITHUB_TOKEN=ghp_...` - le script bascule tout seul sur curl.
 
 Sous Windows : Git Bash ou WSL.
-
-Pour republier le dataset après modification :
-`PUBLISH=1 ./scripts/pack_dataset.sh` (repacke les 6 archives, recalcule les
-checksums, met à jour la release).
 
 ## Run model - 3 input arguments
 
