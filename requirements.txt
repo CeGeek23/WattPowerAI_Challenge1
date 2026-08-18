@@ -7,6 +7,13 @@
 #   uv venv                                 une seule fois, cree .venv
 #   uv pip install -r requirements.txt      synchroniser (ex. apres un git pull)
 #
+#   `uv venv` CREE l'environnement, il ne l'ACTIVE pas - aucune commande ne
+#   peut activer un venv depuis un sous-processus. Avec `uv run` ci-dessous,
+#   l'activation est inutile : uv prend .venv tout seul. Si vous voulez quand
+#   meme un prompt active :  source .venv/bin/activate   (Windows Git Bash :
+#   source .venv/Scripts/activate). Et si .venv existe deja, `uv venv` refuse
+#   de l'ecraser : passez simplement a la ligne suivante.
+#
 #   uv run python run_model.py --model train --input dataset  --output-dir output
 #   uv run python run_model.py --model test  --input sample_input.csv --output-dir output
 #
