@@ -8,6 +8,7 @@ output*/
 .val_out*/
 .eval_out_*/
 validation_report.txt
+.ruff_cache/
 
 # real measurement data never belongs in this repo
 /data/

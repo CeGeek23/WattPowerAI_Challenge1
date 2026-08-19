@@ -44,4 +44,4 @@ ruff>=0.1
 
 # --- decommenter si vous partez sur du deep learning (~2.5 Go) ---
 #   les poids pre-entraines se livrent DANS my_model/, aucun reseau pendant fit()
-# torch>=2.1
+torch>=2.1

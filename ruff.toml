@@ -1,0 +1,39 @@
+# Config ruff (lint + format) de ce depot.
+#
+# Fichiers geles par les organisateurs (CLAUDE.md / submission_instructions_2026.md) :
+# jamais touches, meme par `ruff format` ou `ruff check --fix` -> exclus explicitement
+# ci-dessous, en plus des artefacts non versionnes (voir .gitignore).
+
+target-version = "py311"
+line-length = 88
+
+# sans ca, exclude/extend-exclude ne protegent que le balayage de repertoire
+# (`ruff check .`) : un fichier gele ouvert et corrige explicitement (VS Code
+# "format on save", `ruff check run_model.py`) resterait modifiable.
+force-exclude = true
+
+extend-exclude = [
+    # geles par les organisateurs -- jamais lint/format/fix
+    "run_model.py",
+    "framework",
+    "validate_submission.py",
+    "sample_data",
+    "sample_input.csv",
+    # artefacts regeneres, jamais commites
+    "dataset",
+    ".dataset_cache",
+    "model_state",
+    "output*",
+    ".val_out*",
+    ".eval_out_*",
+]
+
+[lint]
+select = [
+    "E",   # pycodestyle (erreurs)
+    "W",   # pycodestyle (avertissements)
+    "F",   # pyflakes
+    "I",   # tri des imports (PEP 8)
+    "UP",  # pyupgrade -- syntaxe moderne py311/py312
+    "B",   # flake8-bugbear -- pieges courants
+]
