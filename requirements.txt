@@ -7,41 +7,38 @@
 #   (`uv venv` cree l'env, il ne l'active pas ; `uv run` rend l'activation
 #    inutile. Sinon : source .venv/bin/activate.)
 #
-#  AVANT LA SOUMISSION : supprimer d'ici tout ce que my_model/ n'importe pas.
-#  Leur machine est un Windows Server 2022 et leur version de Python n'est pas
-#  publiee ; un paquet inutilise ne peut rien gagner et peut faire echouer
-#  l'installation a l'intake.
+#  Ce qui suit est exactement ce que my_model/ importe, rien de plus : leur
+#  machine est un Windows Server 2022 et leur version de Python n'est pas
+#  publiee, donc chaque paquet inutile est un risque d'echec a l'intake sans
+#  aucun gain possible. Verifie en env neuf sur Python 3.9 a 3.13.
 # ===========================================================================
 
-# --- socle (utilise par le framework lui-meme) ---
-numpy>=1.24
-pandas>=2.0
+numpy>=1.24                # modele + framework
+pandas>=2.0                # lecture du dataset par framework/data.py
+scipy>=1.10                # moindres carres non lineaires, filtre median
 
-# --- modelisation ---
-scipy>=1.10                # ajuste de courbes de fade, lissage, optimisation
-scikit-learn>=1.3          # extrapolation entre points de fonctionnement, GPR
-lightgbm>=4.0              # gradient boosting sur features par cycle
-xgboost>=2.0               # alternative
-statsmodels>=0.14          # regression, series temporelles, intervalles
-optuna>=3.4                # recherche d'hyperparametres
-joblib>=1.3                # parallelisation, cache disque des features
-
-# --- exploration et visualisation ---
-matplotlib>=3.7            # courbes SOH vs cycle, residus, ICA/dQ-dV
-seaborn>=0.13              # comparaisons entre cellules/conditions
-plotly>=5.18               # courbes interactives (zoom cycle, survol)
-jupyterlab>=4.0            # notebooks d'analyse
-ipykernel>=6.25            # noyau VS Code / Jupyter
-ipywidgets>=8.1            # sliders pour explorer les cycles
-
-# --- lecture des 559 Mo de CSV ---
-pyarrow>=14.0              # moteur CSV rapide, cache en parquet
-tqdm>=4.66                 # barres de progression
-
-# --- qualite ---
-pytest>=7.4
-ruff>=0.1
-
-# --- decommenter si vous partez sur du deep learning (~2.5 Go) ---
-#   les poids pre-entraines se livrent DANS my_model/, aucun reseau pendant fit()
-torch>=2.1
+# ===========================================================================
+#  OUTILLAGE LOCAL - volontairement commente, ne pas livrer.
+#  Necessaire uniquement pour analysis/00_exploration.ipynb et le dev.
+#  Pour le reinstaller sans toucher au livrable :
+#
+#   uv pip install plotly jupyterlab ipykernel ipywidgets nbformat \
+#                  matplotlib seaborn pyarrow tqdm pytest ruff
+#
+#   plotly>=5.18       courbes interactives du notebook
+#   jupyterlab>=4.0    notebooks d'analyse
+#   ipykernel>=6.25    noyau VS Code / Jupyter
+#   ipywidgets>=8.1    sliders pour explorer les cycles
+#   nbformat>=5.9      lecture/validation des notebooks
+#   matplotlib>=3.7    figures statiques
+#   seaborn>=0.13      comparaisons entre cellules
+#   pyarrow>=14.0      moteur CSV rapide, cache parquet
+#   tqdm>=4.66         barres de progression
+#   pytest>=7.4        tests
+#   ruff>=0.1          lint et format
+#
+#  Retires faute d'usage : scikit-learn, lightgbm, xgboost, statsmodels,
+#  optuna, joblib, torch. Le modele final n'en importe aucun (l'interpolation
+#  entre points de fonctionnement est un GP ecrit a la main en numpy, 6 lignes
+#  dans my_model/model_template.py, pour ne pas dependre de scikit-learn).
+# ===========================================================================

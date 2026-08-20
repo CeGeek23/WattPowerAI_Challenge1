@@ -1,0 +1,32 @@
+{
+ "meta": {
+  "c_rates": [
+   0.5,
+   1.0
+  ],
+  "chemistries": [
+   "NMC_pouch"
+  ],
+  "ecarte": [
+   "forme (RMSE mediane 1.51 > 1.5)",
+   "exposant C (protocoles publics non comparables)"
+  ],
+  "n_cells": 17,
+  "rmse_forme_partagee": {
+   "median": 1.511,
+   "p90": 10.27
+  },
+  "sources": [
+   "che2023_Dataset1",
+   "che2023_Dataset2",
+   "che2023_Dataset3",
+   "che2023_Dataset4"
+  ],
+  "temperatures_degC": [
+   25.0,
+   35.0,
+   55.0
+  ]
+ },
+ "slope": 2.5753071174263265
+}

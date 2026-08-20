@@ -9,6 +9,9 @@ output*/
 .eval_out_*/
 validation_report.txt
 .ruff_cache/
+# envs neufs crees par scripts/check_env.sh (~1 Go)
+.env_check/
+.ipynb_checkpoints/
 
 # real measurement data never belongs in this repo
 /data/
@@ -22,3 +25,6 @@ validation_report.txt
 .dataset_cache/
 # cache parquet de l analyse exploratoire (regenerable)
 analysis/.cache/
+
+# resultats du banc dessai (regenerables)
+benchmark*.csv
