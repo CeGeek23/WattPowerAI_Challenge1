@@ -1,13 +1,51 @@
 # -*- coding: utf-8 -*-
-"""Candidats comparables. Hors livraison : importés seulement par scripts/benchmark.py."""
+"""Candidats comparables. Hors livraison : importes seulement par scripts/benchmark.py.
+
+Trois architectures de sequence (LSTM, Transformer, couplage) declinees avec et
+sans pre-entrainement sur les cellules publiques, plus deux references de mesure :
+`baseline` (le bareme, 1.00) et `master` (le modele livre).
+"""
+import os
+
 from .base import Candidate
-from .gbm import GbmDirect, GbmResidual, available_backend
-from .hybrid import Ensemble, Residual
-from .neural import LstmModel, TransformerModel
+from .neural import LstmModel, LstmTransformerModel, TransformerModel
+
+RACINE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Wheeler est livre (68 ko) ; Che est regenere par scripts/pretrain_data/ et
+# reste dans le cache, trop gros pour le depot.
+CSV_PUBLICS = [os.path.join(RACINE, "scripts", "pretrain_data", "pretrain_wheeler.csv"),
+               os.path.join(RACINE, ".dataset_cache", "pretrain", "che", "pretrain_che.csv")]
+
+
+def courbes_publiques(chemins=None):
+    """[(T, C, n, soh)] des cellules publiques, pour le pre-entrainement."""
+    import numpy as np
+    import pandas as pd
+
+    out = []
+    for f in (chemins or CSV_PUBLICS):
+        if not os.path.exists(f):
+            continue
+        d = pd.read_csv(f)
+        for _, g in d.groupby(["source", "cell_id"]):
+            g = g.dropna(subset=["cycle", "soh_pct"]).sort_values("cycle")
+            n = g["cycle"].to_numpy(float)
+            y = g["soh_pct"].to_numpy(float)
+            ok = np.isfinite(n) & np.isfinite(y) & (n >= 1) & (y > 20) & (y < 130)
+            n, y = n[ok], y[ok]
+            if len(n) < 20 or (y.max() - y.min()) < 3.0:
+                continue
+            depart = float(np.percentile(y[:max(3, len(y) // 20)], 90))
+            if depart > 50:                      # ramener la courbe a 100 au depart
+                y = y * (100.0 / depart)
+            T, C = float(g["T_degC"].median()), float(g["c_rate_discharge"].median())
+            if np.isfinite(T) and np.isfinite(C) and C > 0:
+                out.append((T, C, n, y))
+    return out
 
 
 class MasterCurve(Candidate):
-    """Le modèle livré (courbe maîtresse + loi tau), comme référence."""
+    """Le modele livre, comme reference."""
 
     name = "master"
 
@@ -22,7 +60,7 @@ class MasterCurve(Candidate):
 
 
 class Baseline(Candidate):
-    """`model_example.py`, la référence du barème (score 1.00)."""
+    """`model_example.py`, la reference du bareme (score 1.00)."""
 
     name = "baseline"
 
@@ -44,23 +82,19 @@ class Baseline(Candidate):
 CANDIDATS = {
     "baseline": lambda: Baseline(),
     "master": lambda: MasterCurve(),
-    "gbm": lambda: GbmDirect(),
     "lstm": lambda: LstmModel(),
     "transformer": lambda: TransformerModel(),
-    "master+gbm": lambda: GbmResidual(),
-    "lstm+gbm": lambda: Residual(LstmModel(), GbmDirect(), nom="lstm+gbm"),
-    "transformer+gbm": lambda: Residual(TransformerModel(), GbmDirect(), nom="transformer+gbm"),
-    "lstm+transformer": lambda: Ensemble([LstmModel(), TransformerModel()],
-                                         nom="lstm+transformer"),
-    "master+lstm": lambda: Residual(MasterCurve(), LstmModel(), nom="master+lstm"),
+    "lstm+transformer": lambda: LstmTransformerModel(),
+    "lstm_pre": lambda: LstmModel(pretrain_curves=courbes_publiques()),
+    "transformer_pre": lambda: TransformerModel(pretrain_curves=courbes_publiques()),
+    "lstm+transformer_pre": lambda: LstmTransformerModel(pretrain_curves=courbes_publiques()),
 }
 
 
 def build(nom):
-    """Instancie un candidat par son nom."""
     if nom not in CANDIDATS:
         raise KeyError(f"candidat inconnu : {nom!r}. Disponibles : {sorted(CANDIDATS)}")
     return CANDIDATS[nom]()
 
 
-__all__ = ["CANDIDATS", "build", "available_backend", "Candidate", "Ensemble", "Residual"]
+__all__ = ["CANDIDATS", "build", "courbes_publiques", "Candidate"]

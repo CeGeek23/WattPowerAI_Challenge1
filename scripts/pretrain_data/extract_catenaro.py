@@ -9,7 +9,9 @@ REVERSIBLE de la capacite (effet cinetique de T et du C-rate), pas du fade.
 Sortie : pretrain_catenaro_capacite.csv
   source,cell_id,chemistry,nominal_Ah,T_degC,c_rate,capacite_Ah
 """
-import csv, re, sys
+import csv
+import re
+import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -38,7 +40,7 @@ def discharge_capacity_ah(path):
     prev_t = None
     for r in it:
         try:
-            t = float(r[1]); si = r[3]; i = float(r[5]); temp = float(r[6])
+            t, si, i, temp = float(r[1]), r[3], float(r[5]), float(r[6])
         except (TypeError, ValueError):
             continue
         dt = 0.0 if prev_t is None else t - prev_t
@@ -88,10 +90,12 @@ def main(src_dir, out_csv, out_csv_full):
     cols = ["source", "cell_id", "chemistry", "nominal_Ah", "T_degC", "c_rate", "capacite_Ah"]
     with open(out_csv, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
-        w.writeheader(); w.writerows(rows)
+        w.writeheader()
+        w.writerows(rows)
     with open(out_csv_full, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols + ["_T_cell_moy", "_duree_s", "_I_moy_A", "_fichier"])
-        w.writeheader(); w.writerows(rows)
+        w.writeheader()
+        w.writerows(rows)
     print(f"ecrit {len(rows)} lignes -> {out_csv}")
 
 

@@ -34,11 +34,13 @@ scipy>=1.10                # moindres carres non lineaires, filtre median
 #   seaborn>=0.13      comparaisons entre cellules
 #   pyarrow>=14.0      moteur CSV rapide, cache parquet
 #   tqdm>=4.66         barres de progression
+#   h5py>=3.10         lecture des .mat v7.3 du pre-entrainement (scripts/pretrain_data/)
 #   pytest>=7.4        tests
 #   ruff>=0.1          lint et format
 #
-#  Retires faute d'usage : scikit-learn, lightgbm, xgboost, statsmodels,
-#  optuna, joblib, torch. Le modele final n'en importe aucun (l'interpolation
-#  entre points de fonctionnement est un GP ecrit a la main en numpy, 6 lignes
-#  dans my_model/model_template.py, pour ne pas dependre de scikit-learn).
+#  Retires du livrable : scikit-learn, lightgbm, xgboost, statsmodels, optuna,
+#  joblib, torch. Le modele livre n'en importe aucun (l'interpolation entre
+#  points de fonctionnement est un GP ecrit a la main en numpy, 6 lignes dans
+#  my_model/model_template.py). Seul my_model/candidates/, hors livraison,
+#  utilise torch et scikit-learn pour le banc d'essai.
 # ===========================================================================

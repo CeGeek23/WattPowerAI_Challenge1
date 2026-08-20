@@ -14,9 +14,13 @@ IMPORTANT CAVEAT (from the official Mendeley description, v9):
      (<1% bias). For Dataset1 the charge capacity also absorbs the charging
      pulses of the dynamic discharge profile and is NOT a discharge capacity.
 """
-import csv, re, sys
+import csv
+import re
+import sys
 from pathlib import Path
-import h5py, numpy as np
+
+import h5py
+import numpy as np
 
 CACHE = Path(sys.argv[1])
 OUT = Path(sys.argv[2])

@@ -15,7 +15,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from framework.data import load_cells  # noqa: E402
-from my_model.candidates import CANDIDATS, available_backend, build  # noqa: E402
+from my_model.candidates import CANDIDATS, build  # noqa: E402
 
 INTERIEUR = {"102Ah_35degC_1C_cell1", "102Ah_45degC_0p5C_cell3", "102Ah_45degC_1C_cell1"}
 
@@ -88,7 +88,7 @@ def main():
     protocoles = ["in-sample", "loco"] if args.quick else ["in-sample", "loco", "loco-800", "loco-400"]
     cells = sorted(load_cells(args.data, verbose=False),
                    key=lambda c: (c.temperature_degC, c.c_rate))
-    print(f"{len(cells)} cellules · backend boosting : {available_backend()} · "
+    print(f"{len(cells)} cellules · "
           f"protocoles : {', '.join(protocoles)}\n")
 
     lignes = []

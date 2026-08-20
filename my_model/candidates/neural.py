@@ -1,8 +1,19 @@
 # -*- coding: utf-8 -*-
-"""LSTM et Transformer sur la serie ré-échantillonnée. Sortie = incréments de perte cumulés."""
+"""LSTM, Transformer et leur couplage, sur la serie SOH reechantillonnee.
+
+Trois leviers pour qu'un reseau tienne sur 6 sequences :
+  - sortie = increments de perte cumules (softplus + cumsum) : monotonie garantie ;
+  - mixup en (T, C) : conditions virtuelles interpolees entre deux cellules, pour
+    forcer une reponse continue la ou il n'y a que 6 points ;
+  - pre-entrainement optionnel sur les courbes publiques, puis fine-tuning.
+"""
 import numpy as np
 
 from .base import CYCLES, N_CYCLES, SEED, Candidate, cond_features, cycle_features
+
+# Le pre-entrainement ne depend pas des cellules cibles : on le fait une fois et
+# on reutilise les poids (sinon la LOCO le refait a chaque pli).
+_CACHE_PRETRAIN = {}
 
 
 def _torch():
@@ -11,94 +22,134 @@ def _torch():
 
 
 class _SequenceCandidate(Candidate):
-    """Partie commune : grille, normalisation, entraînement, prédiction."""
+    """Grille, cible, entrainement, prediction : commun aux trois architectures."""
 
     name = "sequence"
     needs = ("torch",)
 
-    def __init__(self, n_steps=240, hidden=64, epochs=5000, lr=0.01,
-                 weight_decay=1e-4, autoregressive=False):
+    def __init__(self, n_steps=240, hidden=64, epochs=4000, lr=0.005, weight_decay=1e-4,
+                 n_mixup=24, pretrain_curves=None, pretrain_epochs=3000):
         self.n_steps = n_steps
         self.hidden = hidden
         self.epochs = epochs
         self.lr = lr
         self.weight_decay = weight_decay
-        self.autoregressive = autoregressive
+        self.n_mixup = n_mixup
+        self.pretrain_curves = pretrain_curves      # [(T, C, n, soh)] publiques
+        self.pretrain_epochs = pretrain_epochs
 
-    # ------------------------------------------------------------ données
+    # ------------------------------------------------------------- donnees
     def _grid(self):
-        """Cycle au centre de chaque bloc de la grille régulière."""
         edges = np.linspace(0, N_CYCLES, self.n_steps + 1)
         return 0.5 * (edges[:-1] + edges[1:])
 
     def _inputs(self, T, C):
-        """Séquence d'entrée (n_steps, n_features) pour une condition donnée."""
         grid = self._grid()
-        cyc = cycle_features(grid)
         cond = np.repeat(cond_features([T], [C]), len(grid), axis=0)
-        return np.column_stack([cyc, cond]).astype(np.float32)
+        return np.column_stack([cycle_features(grid), cond]).astype(np.float32)
 
-    def _targets(self, curves):
-        """Perte de SOH moyenne par bloc + masque des blocs observés."""
-        grid_idx = np.clip(((np.arange(N_CYCLES) ) * self.n_steps) // N_CYCLES,
-                           0, self.n_steps - 1)
+    def _targets(self, curves, a_ref):
+        """Perte de SOH moyenne par bloc, NaN la ou rien n'est observe."""
+        bloc = np.clip((np.arange(N_CYCLES) * self.n_steps) // N_CYCLES, 0, self.n_steps - 1)
         Y = np.full((len(curves), self.n_steps), np.nan, dtype=np.float32)
         for k, (_, _, n, y) in enumerate(curves):
-            b = grid_idx[np.clip(n.astype(int), 1, N_CYCLES) - 1]
-            loss = self.a_ - y
-            somme = np.bincount(b, weights=loss, minlength=self.n_steps)
+            b = bloc[np.clip(n.astype(int), 1, N_CYCLES) - 1]
+            somme = np.bincount(b, weights=a_ref - y, minlength=self.n_steps)
             compte = np.bincount(b, minlength=self.n_steps)
             vus = compte > 0
             Y[k, vus] = (somme[vus] / compte[vus]).astype(np.float32)
         return Y
 
-    # ------------------------------------------------- entraînement commun
-    def _fit(self, curves):
+    def _tenseurs(self, curves, a_ref):
         torch = _torch()
-        torch.manual_seed(SEED)
-        np.random.seed(SEED)
+        X = np.stack([self._inputs(T, C) for T, C, _, _ in curves])
+        Y = self._targets(curves, a_ref)
+        M = np.isfinite(Y).astype(np.float32)
+        return (torch.tensor(X), torch.tensor(np.nan_to_num(Y)), torch.tensor(M),
+                np.array([[T, C] for T, C, _, _ in curves], dtype=float))
 
-        X = np.stack([self._inputs(T, C) for T, C, _, _ in curves])       # (B, L, F)
-        Y = self._targets(curves)                                          # (B, L)
-        mask = np.isfinite(Y)
-        self.echelle_ = float(max(np.nanmax(Y), 1.0))
-        Yn = np.nan_to_num(Y / self.echelle_)
+    def _mixup(self, xb, yb, mb, conds, rng):
+        """Conditions virtuelles interpolees : la reponse en (T, C) doit etre continue."""
+        torch = _torch()
+        if self.n_mixup <= 0 or len(conds) < 2:
+            return xb, yb, mb
+        i = rng.integers(0, len(conds), self.n_mixup)
+        j = rng.integers(0, len(conds), self.n_mixup)
+        garde = i != j
+        i, j = i[garde], j[garde]
+        if not len(i):
+            return xb, yb, mb
+        lam_np = rng.uniform(0.2, 0.8, len(i)).astype(np.float32)
+        melange = np.stack([self._inputs(*(lam_np[k] * conds[i[k]]
+                                           + (1 - lam_np[k]) * conds[j[k]]))
+                            for k in range(len(i))])
+        lam = torch.tensor(lam_np)[:, None]
+        return (torch.cat([xb, torch.tensor(melange)]),
+                torch.cat([yb, lam * yb[i] + (1 - lam) * yb[j]]),
+                torch.cat([mb, mb[i] * mb[j]]))
 
-        xb = torch.tensor(X)
-        yb = torch.tensor(Yn)
-        mb = torch.tensor(mask.astype(np.float32))
-        # chaque cellule pèse 1, quel que soit son nombre de blocs observés
-        wb = mb / mb.sum(dim=1, keepdim=True).clamp(min=1.0)
-
-        self.net_ = self._build(n_features=X.shape[2])
-        opt = torch.optim.Adam(self.net_.parameters(), lr=self.lr,
-                               weight_decay=self.weight_decay)
-        sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=self.epochs)
+    # -------------------------------------------------------- entrainement
+    def _boucle(self, xb, yb, mb, conds, epochs, lr, rng):
+        torch = _torch()
+        xa, ya = xb, yb
+        pa = mb / mb.sum(dim=1, keepdim=True).clamp(min=1.0)
+        opt = torch.optim.Adam(self.net_.parameters(), lr=lr, weight_decay=self.weight_decay)
+        sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(epochs, 1))
         self.net_.train()
-        for _ in range(self.epochs):
+        perte = torch.tensor(0.0)
+        for ep in range(epochs):
+            if self.n_mixup and ep % 25 == 0:      # nouveau lot virtuel de temps en temps
+                xa, ya, ma = self._mixup(xb, yb, mb, conds, rng)
+                pa = ma / ma.sum(dim=1, keepdim=True).clamp(min=1.0)
             opt.zero_grad()
-            pred = self.net_(xb)
-            perte = (wb * (pred - yb) ** 2).sum() / len(curves)
+            perte = (pa * (self.net_(xa) - ya) ** 2).sum() / len(xa)
             perte.backward()
             torch.nn.utils.clip_grad_norm_(self.net_.parameters(), 5.0)
             opt.step()
             sched.step()
         self.net_.eval()
-        self.perte_ = float(perte.detach())
+        return float(perte.detach())
+
+    def _fit(self, curves):
+        torch = _torch()
+        torch.manual_seed(SEED)
+        rng = np.random.default_rng(SEED)
+
+        xb, yb, mb, conds = self._tenseurs(curves, self.a_)
+        self.echelle_ = float(max(np.nanmax(yb.numpy()), 1.0))
+        yb = yb / self.echelle_
+        self.net_ = self._build(n_features=xb.shape[2])
+        self.n_pretrain_ = 0
+
+        if self.pretrain_curves:
+            pc = [c for c in self.pretrain_curves if len(c[2]) >= 20]
+            if len(pc) >= 3:
+                cle = (type(self).__name__, self.hidden, self.n_steps, self.pretrain_epochs,
+                       len(pc), round(self.echelle_, 3))
+                if cle in _CACHE_PRETRAIN:
+                    self.net_.load_state_dict(
+                        {k: torch.tensor(v) for k, v in _CACHE_PRETRAIN[cle].items()})
+                else:
+                    a_pub = float(np.mean([np.percentile(y, 99.5) for *_, y in pc]))
+                    xp, yp, mp, cp = self._tenseurs(pc, a_pub)
+                    self.perte_pretrain_ = self._boucle(xp, yp / self.echelle_, mp, cp,
+                                                        self.pretrain_epochs, self.lr, rng)
+                    _CACHE_PRETRAIN[cle] = {k: v.cpu().numpy()
+                                            for k, v in self.net_.state_dict().items()}
+                self.n_pretrain_ = len(pc)
+        # apres pre-entrainement on reprend plus doucement : c'est du fine-tuning
+        self.perte_ = self._boucle(xb, yb, mb, conds, self.epochs,
+                                   self.lr * (0.3 if self.n_pretrain_ else 1.0), rng)
 
     def _trajectory(self, T, C):
         torch = _torch()
         with torch.no_grad():
             pred = self.net_(torch.tensor(self._inputs(T, C)[None, ...]))
-        perte = pred.numpy().ravel() * self.echelle_
-        grid = self._grid()
-        return self.a_ - np.interp(CYCLES, grid, perte)
+        return self.a_ - np.interp(CYCLES, self._grid(), pred.numpy().ravel() * self.echelle_)
 
     def _build(self, n_features):
         raise NotImplementedError
 
-    # torch se pickle mal en présence de tenseurs non contigus : on ne garde
-    # que les poids, et on reconstruit le réseau au chargement.
     def __getstate__(self):
         etat = dict(self.__dict__)
         net = etat.pop("net_", None)
@@ -117,49 +168,36 @@ class _SequenceCandidate(Candidate):
 
 
 class LstmModel(_SequenceCandidate):
-    """LSTM sur la séquence de cycles, sortie = incréments de perte cumulés."""
+    """LSTM a deux couches sur la sequence de cycles."""
 
     name = "lstm"
 
     def _build(self, n_features):
         torch = _torch()
         self._n_features = n_features
-        hidden, autoreg = self.hidden, self.autoregressive
+        hidden = self.hidden
 
         class Net(torch.nn.Module):
             def __init__(self):
                 super().__init__()
-                self.lstm = torch.nn.LSTM(n_features + (1 if autoreg else 0),
-                                          hidden, batch_first=True)
+                self.lstm = torch.nn.LSTM(n_features, hidden, num_layers=2, batch_first=True)
                 self.head = torch.nn.Linear(hidden, 1)
 
             def forward(self, x):
-                if not autoreg:
-                    h, _ = self.lstm(x)
-                    d = torch.nn.functional.softplus(self.head(h)).squeeze(-1)
-                    return torch.cumsum(d, dim=1)
-                B, L, _ = x.shape
-                etat, cumul, sorties = None, torch.zeros(B, 1), []
-                for t in range(L):
-                    pas = torch.cat([x[:, t:t + 1, :], cumul[:, None, :]], dim=-1)
-                    h, etat = self.lstm(pas, etat)
-                    d = torch.nn.functional.softplus(self.head(h)).squeeze(-1)
-                    cumul = cumul + d
-                    sorties.append(cumul)
-                return torch.cat(sorties, dim=1)
+                h, _ = self.lstm(x)
+                d = torch.nn.functional.softplus(self.head(h)).squeeze(-1)
+                return torch.cumsum(d, dim=1)
 
         return Net()
 
 
 class TransformerModel(_SequenceCandidate):
-    """Transformer encodeur sur la séquence de cycles, même tête cumulative."""
+    """Transformer encodeur sur la sequence de cycles."""
 
     name = "transformer"
 
-    def __init__(self, n_steps=240, hidden=64, epochs=5000, lr=0.003,
-                 weight_decay=1e-4, n_layers=3, n_heads=4, autoregressive=False):
-        super().__init__(n_steps=n_steps, hidden=hidden, epochs=epochs, lr=lr,
-                         weight_decay=weight_decay, autoregressive=False)
+    def __init__(self, n_layers=3, n_heads=4, lr=0.003, **kw):
+        super().__init__(lr=lr, **kw)
         self.n_layers = n_layers
         self.n_heads = n_heads
 
@@ -182,6 +220,42 @@ class TransformerModel(_SequenceCandidate):
 
             def forward(self, x):
                 h = self.enc(self.proj(x) + self.pos)
+                d = torch.nn.functional.softplus(self.head(h)).squeeze(-1)
+                return torch.cumsum(d, dim=1)
+
+        return Net()
+
+
+class LstmTransformerModel(_SequenceCandidate):
+    """Couplage empile : le LSTM code la dynamique locale, l'attention l'integre."""
+
+    name = "lstm+transformer"
+
+    def __init__(self, n_layers=2, n_heads=4, lr=0.003, **kw):
+        super().__init__(lr=lr, **kw)
+        self.n_layers = n_layers
+        self.n_heads = n_heads
+
+    def _build(self, n_features):
+        torch = _torch()
+        self._n_features = n_features
+        hidden, n_layers, n_heads, n_steps = self.hidden, self.n_layers, self.n_heads, self.n_steps
+
+        class Net(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.lstm = torch.nn.LSTM(n_features, hidden, batch_first=True)
+                self.pos = torch.nn.Parameter(torch.zeros(1, n_steps, hidden))
+                torch.nn.init.normal_(self.pos, std=0.02)
+                couche = torch.nn.TransformerEncoderLayer(
+                    d_model=hidden, nhead=n_heads, dim_feedforward=2 * hidden,
+                    dropout=0.0, batch_first=True, norm_first=True)
+                self.enc = torch.nn.TransformerEncoder(couche, num_layers=n_layers)
+                self.head = torch.nn.Linear(hidden, 1)
+
+            def forward(self, x):
+                h, _ = self.lstm(x)
+                h = self.enc(h + self.pos)
                 d = torch.nn.functional.softplus(self.head(h)).squeeze(-1)
                 return torch.cumsum(d, dim=1)
 

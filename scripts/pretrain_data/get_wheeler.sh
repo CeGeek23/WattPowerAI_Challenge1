@@ -11,7 +11,8 @@
 #        defaut: <racine du depot>/.dataset_cache/pretrain/wheeler
 set -eu
 
-DEST="${1:-$(cd "$(dirname "$0")" && pwd)/.dataset_cache/pretrain/wheeler}"
+RACINE="$(cd "$(dirname "$0")/../.." && pwd)"
+DEST="${1:-$RACINE/.dataset_cache/pretrain/wheeler}"
 BASE="https://entrepot.recherche.data.gouv.fr/api/access/datafile"
 DOI="doi:10.57745/OLBXKT"
 
