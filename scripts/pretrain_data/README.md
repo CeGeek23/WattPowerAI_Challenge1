@@ -8,7 +8,7 @@ CSV que `scripts/pretrain.py` consomme. Les données brutes vont dans
 | --- | --- | --- | --- |
 | Che et al. 2023 | `get_che.sh` (260 Mo) | `build_che_csv.py` | **pente d'Arrhenius 2.58** → `my_model/pretrained.json` |
 | Wheeler et al. 2025 | `get_wheeler.sh` (536 ko) | copie déclarée : `pretrain_wheeler.csv` | **dispersion cellule-à-cellule 10 %** → nugget du GP |
-| Catenaro & Onori 2021 | `get_catenaro.sh` (638 Mo) | `extract_catenaro.py` | capacité **réversible** vs T → justifie `a(T)` |
+| Catenaro & Onori 2021 | copie déclarée : `pretrain_catenaro_capacite.csv` | — | capacité **réversible** vs T → justifie `a(T)` |
 
 Dépendance hors livraison : `uv pip install h5py` (les `.mat` de Che sont en
 v7.3, donc du HDF5). Rien de tout cela n'entre dans `requirements.txt` : le
@@ -29,6 +29,8 @@ l'article, qui documente les conditions d'essai absentes des données. Le script
 de téléchargement reste fourni pour la traçabilité.
 
 Catenaro ne contient **aucun vieillissement** (15 à 24 décharges de
-caractérisation par cellule) : son CSV a un schéma différent
-(`capacite_Ah` par (T, C-rate), pas de colonne `cycle`) et n'alimente pas
-`pretrain.py`. Il ne sert qu'à étayer un chiffre du rapport.
+caractérisation par cellule) : rejeté pour la loi de fade. Seul son résultat
+dérivé est conservé — `pretrain_catenaro_capacite.csv` (15 ko, capacité restituée
+par (T, C-rate)), qui étaye un chiffre du rapport. Les 638 Mo de sources et le
+script d'extraction ont été retirés : ils ne servaient plus qu'à régénérer ce
+tableau. DOI dans le README principal pour la traçabilité.

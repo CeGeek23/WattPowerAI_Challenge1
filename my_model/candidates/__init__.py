@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """Candidats comparables. Hors livraison : importes seulement par scripts/benchmark.py.
 
-Trois architectures de sequence (LSTM, Transformer, couplage) declinees avec et
-sans pre-entrainement sur les cellules publiques, plus deux references de mesure :
-`baseline` (le bareme, 1.00) et `master` (le modele livre).
+Le couplage LSTM -> Transformer, avec et sans pre-entrainement public, plus deux
+references de mesure : `baseline` (le bareme, 1.00) et `master` (le modele livre).
+Le LSTM seul et le Transformer seul ont ete mesures puis ecartes.
 """
 import os
 
 from .base import Candidate
-from .neural import LstmModel, LstmTransformerModel, TransformerModel
+from .neural import LstmTransformerModel
 
 RACINE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Wheeler est livre (68 ko) ; Che est regenere par scripts/pretrain_data/ et
@@ -82,11 +82,7 @@ class Baseline(Candidate):
 CANDIDATS = {
     "baseline": lambda: Baseline(),
     "master": lambda: MasterCurve(),
-    "lstm": lambda: LstmModel(),
-    "transformer": lambda: TransformerModel(),
     "lstm+transformer": lambda: LstmTransformerModel(),
-    "lstm_pre": lambda: LstmModel(pretrain_curves=courbes_publiques()),
-    "transformer_pre": lambda: TransformerModel(pretrain_curves=courbes_publiques()),
     "lstm+transformer_pre": lambda: LstmTransformerModel(pretrain_curves=courbes_publiques()),
 }
 
