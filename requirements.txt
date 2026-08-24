@@ -16,6 +16,10 @@
 numpy>=1.24                # modele + framework
 pandas>=2.0                # lecture du dataset par framework/data.py
 scipy>=1.10                # moindres carres non lineaires, filtre median
+plotly
+scipy
+nbformat>=4.2.0
+matplotlib>=3.11.1
 
 # ===========================================================================
 #  OUTILLAGE LOCAL - volontairement commente, ne pas livrer.
