@@ -23,7 +23,7 @@ scipy>=1.10                # moindres carres non lineaires, filtre median
 #  Pour le reinstaller sans toucher au livrable :
 #
 #   uv pip install plotly jupyterlab ipykernel ipywidgets nbformat \
-#                  matplotlib seaborn pyarrow tqdm pytest ruff
+#                  matplotlib seaborn pyarrow tqdm statsmodels pytest ruff
 #
 #   plotly>=5.18       courbes interactives du notebook
 #   jupyterlab>=4.0    notebooks d'analyse
@@ -35,10 +35,11 @@ scipy>=1.10                # moindres carres non lineaires, filtre median
 #   pyarrow>=14.0      moteur CSV rapide, cache parquet
 #   tqdm>=4.66         barres de progression
 #   h5py>=3.10         lecture des .mat v7.3 du pre-entrainement (scripts/pretrain_data/)
+#   statsmodels>=0.14  ADF/KPSS, Ljung-Box, AutoReg (analysis/00_exploration.ipynb §8)
 #   pytest>=7.4        tests
 #   ruff>=0.1          lint et format
 #
-#  Retires du livrable : scikit-learn, lightgbm, xgboost, statsmodels, optuna,
+#  Retires du livrable : scikit-learn, lightgbm, xgboost, optuna,
 #  joblib, torch. Le modele livre n'en importe aucun (l'interpolation entre
 #  points de fonctionnement est un GP ecrit a la main en numpy, 6 lignes dans
 #  my_model/model_template.py). Seul my_model/candidates/, hors livraison,
