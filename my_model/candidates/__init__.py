@@ -87,10 +87,16 @@ CANDIDATS = {
 }
 
 
-def build(nom):
+def build(nom, **hyper):
+    """Instancie un candidat ; `hyper` ecrase ses hyperparametres (recherche)."""
     if nom not in CANDIDATS:
         raise KeyError(f"candidat inconnu : {nom!r}. Disponibles : {sorted(CANDIDATS)}")
-    return CANDIDATS[nom]()
+    modele = CANDIDATS[nom]()
+    for k, v in hyper.items():
+        if not hasattr(modele, k):
+            raise KeyError(f"{nom} n'a pas d'hyperparametre {k!r}")
+        setattr(modele, k, type(getattr(modele, k))(v) if getattr(modele, k) is not None else v)
+    return modele
 
 
 __all__ = ["CANDIDATS", "build", "courbes_publiques", "Candidate"]

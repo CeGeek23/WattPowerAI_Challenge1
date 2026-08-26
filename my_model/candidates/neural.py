@@ -26,8 +26,11 @@ def _torch():
     return torch
 
 
-def appareil(choix="auto"):
-    """cuda si dispo, sinon mps (Apple), sinon cpu. `choix` force un appareil."""
+def appareil(choix="cpu"):
+    """`choix="auto"` prend cuda, sinon mps, sinon cpu. Defaut : cpu, explicite.
+
+    Le GPU n'est utilise que si on le demande : device="auto" ou "mps" ou "cuda".
+    """
     torch = _torch()
     if choix != "auto":
         return torch.device(choix)
@@ -45,7 +48,7 @@ class _SequenceCandidate(Candidate):
     needs = ("torch",)
 
     def __init__(self, n_steps=240, hidden=64, epochs=4000, lr=0.005, weight_decay=1e-4,
-                 n_mixup=0, pretrain_curves=None, pretrain_epochs=3000, device="auto"):
+                 n_mixup=0, pretrain_curves=None, pretrain_epochs=3000, device="cpu"):
         self.n_steps = n_steps
         self.hidden = hidden
         self.epochs = epochs
