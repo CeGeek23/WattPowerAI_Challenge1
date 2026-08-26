@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
-"""LSTM, Transformer et leur couplage, sur la serie SOH reechantillonnee.
+"""Couplage LSTM -> Transformer sur la serie SOH reechantillonnee.
+
+Le LSTM seul et le Transformer seul ont ete mesures puis ecartes : 4.82 et 5.48
+de RMSE en LOCO contre 3.22 pour le couplage.
 
 Trois leviers pour qu'un reseau tienne sur 6 sequences :
   - sortie = increments de perte cumules (softplus + cumsum) : monotonie garantie ;
-  - mixup en (T, C) : conditions virtuelles interpolees entre deux cellules, pour
-    forcer une reponse continue la ou il n'y a que 6 points ;
+  - mixup en (T, C) : conditions virtuelles interpolees entre deux cellules.
+    Desactive par defaut : mesure a 6.00 de RMSE en LOCO contre 4.11 sans lui.
+    L'interpolation lineaire des cibles est fausse ici, deux courbes de fade ne
+    s'interpolent pas en amplitude mais en echelle de temps ;
   - pre-entrainement optionnel sur les courbes publiques, puis fine-tuning.
 """
 import numpy as np
@@ -21,6 +26,18 @@ def _torch():
     return torch
 
 
+def appareil(choix="auto"):
+    """cuda si dispo, sinon mps (Apple), sinon cpu. `choix` force un appareil."""
+    torch = _torch()
+    if choix != "auto":
+        return torch.device(choix)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 class _SequenceCandidate(Candidate):
     """Grille, cible, entrainement, prediction : commun aux trois architectures."""
 
@@ -28,7 +45,7 @@ class _SequenceCandidate(Candidate):
     needs = ("torch",)
 
     def __init__(self, n_steps=240, hidden=64, epochs=4000, lr=0.005, weight_decay=1e-4,
-                 n_mixup=24, pretrain_curves=None, pretrain_epochs=3000):
+                 n_mixup=0, pretrain_curves=None, pretrain_epochs=3000, device="auto"):
         self.n_steps = n_steps
         self.hidden = hidden
         self.epochs = epochs
@@ -37,6 +54,7 @@ class _SequenceCandidate(Candidate):
         self.n_mixup = n_mixup
         self.pretrain_curves = pretrain_curves      # [(T, C, n, soh)] publiques
         self.pretrain_epochs = pretrain_epochs
+        self.device = device
 
     # ------------------------------------------------------------- donnees
     def _grid(self):
@@ -62,10 +80,12 @@ class _SequenceCandidate(Candidate):
 
     def _tenseurs(self, curves, a_ref):
         torch = _torch()
+        d = self.appareil_
         X = np.stack([self._inputs(T, C) for T, C, _, _ in curves])
         Y = self._targets(curves, a_ref)
         M = np.isfinite(Y).astype(np.float32)
-        return (torch.tensor(X), torch.tensor(np.nan_to_num(Y)), torch.tensor(M),
+        return (torch.tensor(X, device=d), torch.tensor(np.nan_to_num(Y), device=d),
+                torch.tensor(M, device=d),
                 np.array([[T, C] for T, C, _, _ in curves], dtype=float))
 
     def _mixup(self, xb, yb, mb, conds, rng):
@@ -83,8 +103,8 @@ class _SequenceCandidate(Candidate):
         melange = np.stack([self._inputs(*(lam_np[k] * conds[i[k]]
                                            + (1 - lam_np[k]) * conds[j[k]]))
                             for k in range(len(i))])
-        lam = torch.tensor(lam_np)[:, None]
-        return (torch.cat([xb, torch.tensor(melange)]),
+        lam = torch.tensor(lam_np, device=self.appareil_)[:, None]
+        return (torch.cat([xb, torch.tensor(melange, device=self.appareil_)]),
                 torch.cat([yb, lam * yb[i] + (1 - lam) * yb[j]]),
                 torch.cat([mb, mb[i] * mb[j]]))
 
@@ -97,6 +117,7 @@ class _SequenceCandidate(Candidate):
         sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(epochs, 1))
         self.net_.train()
         perte = torch.tensor(0.0)
+        histo = []
         for ep in range(epochs):
             if self.n_mixup and ep % 25 == 0:      # nouveau lot virtuel de temps en temps
                 xa, ya, ma = self._mixup(xb, yb, mb, conds, rng)
@@ -107,18 +128,22 @@ class _SequenceCandidate(Candidate):
             torch.nn.utils.clip_grad_norm_(self.net_.parameters(), 5.0)
             opt.step()
             sched.step()
+            if ep % 25 == 0:
+                histo.append((ep, float(perte.detach())))
         self.net_.eval()
+        self.historique_ = histo          # (epoque, perte) pour tracer la convergence
         return float(perte.detach())
 
     def _fit(self, curves):
         torch = _torch()
         torch.manual_seed(SEED)
         rng = np.random.default_rng(SEED)
+        self.appareil_ = appareil(self.device)
 
         xb, yb, mb, conds = self._tenseurs(curves, self.a_)
-        self.echelle_ = float(max(np.nanmax(yb.numpy()), 1.0))
+        self.echelle_ = float(max(np.nanmax(yb.cpu().numpy()), 1.0))
         yb = yb / self.echelle_
-        self.net_ = self._build(n_features=xb.shape[2])
+        self.net_ = self._build(n_features=xb.shape[2]).to(self.appareil_)
         self.n_pretrain_ = 0
 
         if self.pretrain_curves:
@@ -128,12 +153,14 @@ class _SequenceCandidate(Candidate):
                        len(pc), round(self.echelle_, 3))
                 if cle in _CACHE_PRETRAIN:
                     self.net_.load_state_dict(
-                        {k: torch.tensor(v) for k, v in _CACHE_PRETRAIN[cle].items()})
+                        {k: torch.tensor(v, device=self.appareil_)
+                         for k, v in _CACHE_PRETRAIN[cle].items()})
                 else:
                     a_pub = float(np.mean([np.percentile(y, 99.5) for *_, y in pc]))
                     xp, yp, mp, cp = self._tenseurs(pc, a_pub)
                     self.perte_pretrain_ = self._boucle(xp, yp / self.echelle_, mp, cp,
                                                         self.pretrain_epochs, self.lr, rng)
+                    self.histo_pretrain_ = self.historique_
                     _CACHE_PRETRAIN[cle] = {k: v.cpu().numpy()
                                             for k, v in self.net_.state_dict().items()}
                 self.n_pretrain_ = len(pc)
@@ -143,15 +170,18 @@ class _SequenceCandidate(Candidate):
 
     def _trajectory(self, T, C):
         torch = _torch()
+        d = getattr(self, "appareil_", None) or appareil(self.device)
         with torch.no_grad():
-            pred = self.net_(torch.tensor(self._inputs(T, C)[None, ...]))
-        return self.a_ - np.interp(CYCLES, self._grid(), pred.numpy().ravel() * self.echelle_)
+            pred = self.net_(torch.tensor(self._inputs(T, C)[None, ...], device=d))
+        perte = pred.detach().cpu().numpy().ravel() * self.echelle_
+        return self.a_ - np.interp(CYCLES, self._grid(), perte)
 
     def _build(self, n_features):
         raise NotImplementedError
 
     def __getstate__(self):
         etat = dict(self.__dict__)
+        etat.pop("appareil_", None)          # un torch.device ne se pickle pas proprement
         net = etat.pop("net_", None)
         if net is not None:
             etat["_poids"] = {k: v.cpu().numpy() for k, v in net.state_dict().items()}
@@ -162,68 +192,11 @@ class _SequenceCandidate(Candidate):
         self.__dict__.update(etat)
         if poids is not None:
             torch = _torch()
-            self.net_ = self._build(n_features=self._n_features)
-            self.net_.load_state_dict({k: torch.tensor(v) for k, v in poids.items()})
+            self.appareil_ = appareil(self.device)
+            self.net_ = self._build(n_features=self._n_features).to(self.appareil_)
+            self.net_.load_state_dict({k: torch.tensor(v, device=self.appareil_)
+                                       for k, v in poids.items()})
             self.net_.eval()
-
-
-class LstmModel(_SequenceCandidate):
-    """LSTM a deux couches sur la sequence de cycles."""
-
-    name = "lstm"
-
-    def _build(self, n_features):
-        torch = _torch()
-        self._n_features = n_features
-        hidden = self.hidden
-
-        class Net(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.lstm = torch.nn.LSTM(n_features, hidden, num_layers=2, batch_first=True)
-                self.head = torch.nn.Linear(hidden, 1)
-
-            def forward(self, x):
-                h, _ = self.lstm(x)
-                d = torch.nn.functional.softplus(self.head(h)).squeeze(-1)
-                return torch.cumsum(d, dim=1)
-
-        return Net()
-
-
-class TransformerModel(_SequenceCandidate):
-    """Transformer encodeur sur la sequence de cycles."""
-
-    name = "transformer"
-
-    def __init__(self, n_layers=3, n_heads=4, lr=0.003, **kw):
-        super().__init__(lr=lr, **kw)
-        self.n_layers = n_layers
-        self.n_heads = n_heads
-
-    def _build(self, n_features):
-        torch = _torch()
-        self._n_features = n_features
-        hidden, n_layers, n_heads, n_steps = self.hidden, self.n_layers, self.n_heads, self.n_steps
-
-        class Net(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.proj = torch.nn.Linear(n_features, hidden)
-                self.pos = torch.nn.Parameter(torch.zeros(1, n_steps, hidden))
-                torch.nn.init.normal_(self.pos, std=0.02)
-                couche = torch.nn.TransformerEncoderLayer(
-                    d_model=hidden, nhead=n_heads, dim_feedforward=2 * hidden,
-                    dropout=0.0, batch_first=True, norm_first=True)
-                self.enc = torch.nn.TransformerEncoder(couche, num_layers=n_layers)
-                self.head = torch.nn.Linear(hidden, 1)
-
-            def forward(self, x):
-                h = self.enc(self.proj(x) + self.pos)
-                d = torch.nn.functional.softplus(self.head(h)).squeeze(-1)
-                return torch.cumsum(d, dim=1)
-
-        return Net()
 
 
 class LstmTransformerModel(_SequenceCandidate):
