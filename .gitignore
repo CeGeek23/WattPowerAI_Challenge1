@@ -26,5 +26,8 @@ validation_report.txt
 # cache parquet de l analyse exploratoire (regenerable)
 analysis/.cache/
 
-# resultats du banc dessai (regenerables)
+# resultats du banc dessai / recherche d'hyperparametres (regenerables)
 benchmark*.csv
+search.csv
+search_*.json
+WattPowerAI_Challenge1.zip

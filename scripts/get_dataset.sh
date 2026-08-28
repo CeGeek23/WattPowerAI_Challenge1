@@ -16,7 +16,7 @@ set -euo pipefail
 
 TAG="${DATASET_TAG:-dataset-v1}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEST="$ROOT/dataset"
+DEST="$ROOT/dataset/target"
 CACHE="$ROOT/.dataset_cache"
 
 CELLS=(
@@ -125,5 +125,5 @@ if [ ! -f "$DEST/$PDF" ]; then
 fi
 
 echo
-echo "OK - dataset/ prêt ($(du -sh "$DEST" | cut -f1)). Archives en cache dans .dataset_cache/ (supprimable)."
-echo "Test :  python run_model.py --model train --input dataset --output-dir output"
+echo "OK - dataset/target/ prêt ($(du -sh "$DEST" | cut -f1)). Archives en cache dans .dataset_cache/ (supprimable)."
+echo "Test :  python run_model.py --model train --input dataset/target --output-dir output"
