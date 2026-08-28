@@ -31,6 +31,9 @@ TH_PRIOR_W = 0.45                # weight of the prior, in "equivalent cells"
 LN_TAU_PRIOR = np.log(1000.0)    # ~1000 cycles per unit of reduced time at 40 degC
 SLOPE_PRIOR = 2.8                # d ln(tau) / d (1000/T_K), i.e. Ea ~ 23 kJ/mol
 C_EXP_PRIOR = -0.15              # tau ~ C**-0.15: higher current ages slightly faster
+# tested: Wheeler et al. 2025's fitted C-exponent (+0.15, LFP, 6x wider C-range
+# than target's 0.5-1.0C) helps full LOCO (2.463->2.278) but hurts loco-800/
+# loco-400 monotonically (1.906->2.416, 4.957->5.620) - rejected.
 CURV_PRIOR = 0.0                 # d2 ln(tau) / d(1000/T_K)2
 PRETRAINED = {}
 
@@ -60,9 +63,11 @@ _charge_pretrained()
 RIDGE = np.array([1e-6, 0.02, 0.30, 0.005])  # [intercept, slope, C exponent, curvature]
 
 GP_SIGMA_F = 0.30                # amplitude of condition-specific departures
-# Dispersion cellule-a-cellule de ln(tau) : 10% mesures sur les replicats Wheeler
-# (20 cellules, 7 protocoles) ; 3% optimal en validation croisee, qui ne peut pas
-# la voir (zero replicat cote cible). Valeur intermediaire, cout mesure 0.013.
+# Dispersion cellule-a-cellule de ln(tau) : ~6.6% dans les vrais groupes de
+# replicats Wheeler (meme protocole, Cell1-7) ; pooler par (T,C) nominal sans
+# distinguer les protocoles gonfle ce chiffre a ~16%. 3% optimal en validation
+# croisee, qui ne peut pas le voir (zero replicat cote cible). Valeur
+# intermediaire, cout mesure 0.013.
 GP_SIGMA_N = 0.06                # cell-to-cell scatter of ln tau
 GP_ELL_X = 0.12                  # correlation length in 1000/T_K (~12 degC)
 GP_ELL_C = 0.80                  # correlation length in ln C (~ the whole range)
@@ -226,9 +231,13 @@ class MyModel:
         X = np.column_stack([np.ones_like(x), x, lc, x ** 2])
         W = np.diag(weight)
         prior = np.array([LN_TAU_PRIOR, SLOPE_PRIOR, C_EXP_PRIOR, CURV_PRIOR])
-        # Only estimate the terms the training grid can actually identify; the
+        # Only estimate what the training grid can identify. Slope needs >=3
+        # cells (not just >=2 temps): at exactly 2 cells differing in both T
+        # and C, the C-exponent stays pinned (needs >=3 conditions) so any
+        # real C-rate effect leaks into the barely-regularised slope. Matches
+        # the one documented 2-cell loss to baseline (25C/1C + 45C/0.5C).
         n_T, n_C, n = len(set(np.round(T, 3))), len(set(np.round(C, 3))), len(ln_tau)
-        free = np.array([True, n_T >= 2, n_C >= 2 and n >= 3, n_T >= 3 and n >= 4])
+        free = np.array([True, n_T >= 2 and n >= 3, n_C >= 2 and n >= 3, n_T >= 3 and n >= 4])
         w = prior.copy()
         Xf, lam = X[:, free], np.diag(RIDGE[free])
         try:

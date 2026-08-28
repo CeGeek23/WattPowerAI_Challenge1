@@ -1,20 +1,20 @@
 # -*- coding: utf-8 -*-
-"""Candidats comparables. Hors livraison : importes seulement par scripts/benchmark.py.
+"""Hors livraison, importe seulement par scripts/benchmark.py.
 
-Le couplage LSTM -> Transformer, avec et sans pre-entrainement public, plus deux
-references de mesure : `baseline` (le bareme, 1.00) et `master` (le modele livre).
-Le LSTM seul et le Transformer seul ont ete mesures puis ecartes.
+baseline = bareme (1.00). master = modele livre. Reste : candidats testes
+et ecartes (LSTM/Transformer seuls, couplage, pinn) - gardes pour la trace.
 """
 import os
 
 from .base import Candidate
 from .neural import LstmTransformerModel
+from .pinn import PinnTauModel
 
 RACINE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Wheeler est livre (68 ko) ; Che est regenere par scripts/pretrain_data/ et
 # reste dans le cache, trop gros pour le depot.
 CSV_PUBLICS = [os.path.join(RACINE, "scripts", "pretrain_data", "pretrain_wheeler.csv"),
-               os.path.join(RACINE, ".dataset_cache", "pretrain", "che", "pretrain_che.csv")]
+               os.path.join(RACINE, "dataset", "che", "pretrain_che.csv")]
 
 
 def courbes_publiques(chemins=None):
@@ -84,6 +84,8 @@ CANDIDATS = {
     "master": lambda: MasterCurve(),
     "lstm+transformer": lambda: LstmTransformerModel(),
     "lstm+transformer_pre": lambda: LstmTransformerModel(pretrain_curves=courbes_publiques()),
+    "pinn": lambda: PinnTauModel(),
+    "pinn_gpu": lambda: PinnTauModel(device="auto"),
 }
 
 

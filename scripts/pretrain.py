@@ -27,7 +27,11 @@ MIN_POINTS = 20
 MIN_FADE = 3.0          # points de SOH perdus, sinon la cellule ne dit rien de la forme
 RMSE_FORME_MAX = 1.5    # au-dela, la forme publique ne decrit pas ces cellules : on ne l'exporte pas
 N_TEMPS_MIN = 3         # temperatures distinctes requises pour exporter une pente d'Arrhenius
-N_CRATES_MIN = 99       # jamais : l'exposant C des jeux publics contredit la cible (cf. README)
+N_CELLS_CURV_MIN = 4    # + N_TEMPS_MIN temperatures : meme seuil d'identifiabilite que
+                        # MyModel._fit_law pour le terme de courbure (n_T>=3 et n>=4)
+N_CRATES_MIN = 2        # + chimie LFP (gate plus bas). Che (NMC) ecarte par la chimie,
+                        # pas un veto aveugle -- Wheeler (LFP, contraste 0.33C/2.0C) etait
+                        # rejete par l'ancien seuil de 99 sans jamais etre regarde.
 
 
 class PseudoCell:
@@ -137,10 +141,19 @@ def main():
         poids["slope"] = float(modele.w_[1])
     else:
         ecarte.append(f"pente Arrhenius ({len(temps)} temperature(s) seulement)")
-    if len(crates) >= N_CRATES_MIN:
-        poids["c_exp"] = float(modele.w_[2])
+    if len(temps) >= N_TEMPS_MIN and len(cells) >= N_CELLS_CURV_MIN:
+        poids["curv"] = float(modele.w_[3])
     else:
-        ecarte.append("exposant C (protocoles publics non comparables)")
+        ecarte.append(f"courbure ({len(temps)} temperature(s), {len(cells)} cellule(s) : "
+                      f"seuil {N_TEMPS_MIN} temperatures et {N_CELLS_CURV_MIN} cellules)")
+    chimies = sorted(d.chemistry.dropna().unique().tolist())
+    est_lfp = bool(chimies) and all("lfp" in str(c).lower() for c in chimies)
+    if len(crates) >= N_CRATES_MIN and est_lfp:
+        poids["c_exp"] = float(modele.w_[2])
+    elif not est_lfp:
+        ecarte.append(f"exposant C (chimie {chimies} != LFP, protocoles non comparables a la cible)")
+    else:
+        ecarte.append(f"exposant C ({len(crates)} C-rate(s) seulement)")
     poids.update({
         "meta": {
             "ecarte": ecarte,
@@ -159,7 +172,8 @@ def main():
     print(f"\nforme     A={modele.theta_[0]:.2f} p={modele.theta_[1]:.3f} "
           f"B={modele.theta_[2]:.3f} q={modele.theta_[3]:.3f}")
     print(f"loi       pente Arrhenius={modele.w_[1]:.2f} "
-          f"(Ea≈{modele.w_[1] * 8.314:.0f} kJ/mol) · exposant C={modele.w_[2]:.3f}")
+          f"(Ea≈{modele.w_[1] * 8.314:.0f} kJ/mol) · exposant C={modele.w_[2]:.3f} "
+          f"· courbure={modele.w_[3]:.3f}")
     print(f"exporte   {sorted(k for k in poids if k != 'meta')} · ecarte : {ecarte or 'rien'}")
     print(f"couverture T={temps} C={crates}")
     print(f"RMSE forme partagée sur les cellules publiques : médiane "

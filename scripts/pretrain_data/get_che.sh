@@ -10,15 +10,15 @@
 #   Mendeley Data, V9, doi:10.17632/n3b54nsw8m.9  -- licence CC BY 4.0
 #
 # Usage: ./get_che.sh [dest_dir]
-# Default dest: <repo>/.dataset_cache/pretrain/che/  (git-ignored)
+# Default dest: <repo>/dataset/che/  (git-ignored)
 set -euo pipefail
 
-# Default: <git repo root>/.dataset_cache/pretrain/che (git-ignored).
+# Default: <git repo root>/dataset/che (git-ignored).
 if [ $# -ge 1 ]; then
   DEST="$1"
 else
   ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-  DEST="$ROOT/.dataset_cache/pretrain/che"
+  DEST="$ROOT/dataset/che"
 fi
 DOI_ID="n3b54nsw8m"
 VERSION=9

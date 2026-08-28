@@ -23,12 +23,12 @@ prismatic cell, and transferring the wrong quantity transfers noise.
 
 | dataset | cells | what transferred | what was rejected, and why |
 | --- | --- | --- | --- |
-| Wheeler et al. 2025 [1] | 20 LFP 18650 | **cell-to-cell scatter of ln τ = 10%** (7 protocols x 2-3 replicates) | fade shape: shared-shape RMSE **3.43** SOH points, the 7 protocols are not one family |
+| Wheeler et al. 2025 [1] | 20 LFP 18650 | **cell-to-cell scatter of ln τ ≈ 6.6%** (within true same-protocol replicate groups; pooling by nominal (T,C) without distinguishing protocols inflates this to ~16%) | fade shape: shared-shape RMSE **3.43** SOH points, the 7 protocols are not one family |
 | Che et al. 2023 [2] | 17 NMC pouch | **Arrhenius slope 2.58** (Ea ≈ 21 kJ/mol), from 25/35/55 °C | shape (RMSE 1.51, above the 1.5 gate); C-rate exponent **+1.51**, contradicted by the target cells (-0.06) |
 | Catenaro & Onori 2021 [3] | 18 (LFP/NCA/NMC) | **reversible capacity vs T** (LFP 1C: 94.9% at 5 °C, 100.1% at 25 °C, 101.8% at 35 °C), which justifies modelling a(T) | everything else: the dataset has **no ageing at all**, only 15-24 characterisation discharges per cell |
 
 Two of these numbers are things the released dataset **cannot** provide. It has
-one cell per condition, so no cell-to-cell variance; the 10% figure sets the GP
+one cell per condition, so no cell-to-cell variance; the ~6.6% figure sets the GP
 nugget, which was otherwise guesswork. And the initial-SOH rise with temperature
 is reversible kinetics, not ageing - Catenaro measures it independently, which is
 what licenses fitting a(T) rather than a single constant.
@@ -103,7 +103,7 @@ model is built so that neither effect has to be assumed.
 
 ## 2. The model
 
-```
+```text
 SOH(n | T, C) = a - L( n / tau(T, C) )
 
 L(u) = A (1 - exp(-u^p)) + B u^q          shared shape, saturating SEI + knee
@@ -128,10 +128,12 @@ collapses it back to a constant when the grid cannot identify a slope.
 **Time scale `tau`.** An Arrhenius trend carries the physics and extrapolates;
 a Gaussian-process residual over `(1000/T_K, ln C)` absorbs what the trend
 cannot explain, with a length scale of ~12 °C. Its nugget is set to 6%, between
-the 3% that cross-validation prefers and the 10% of cell-to-cell scatter measured
-on the public replicates - cross-validation cannot see that scatter, since the
+the 3% that cross-validation prefers and the ~6.6% of cell-to-cell scatter
+measured within true same-protocol replicate groups on the public replicates
+(pooling across protocols that merely share a nominal (T,C) inflates this to
+~16%) - cross-validation cannot see that scatter, since the
 released grid has no replicates at all. The fitted
-trend gives an apparent activation energy of 23.4 kJ/mol. The quadratic term
+trend gives an apparent activation energy of 23.0 kJ/mol. The quadratic term
 lets the data express the non-monotone temperature response; its prior is
 zero (plain Arrhenius) and *forcing* a curvature in was tested and clearly
 hurt (mean relative RMSE 0.55 -> 1.08), so it stays data-driven.
@@ -158,7 +160,7 @@ cleaning (e.g. an isolated 42.8% between neighbours at 58.7%).
 
 `fit()` uses `cell.soh` only. It never reads the raw time series, needs no
 network, is deterministic, and the whole pipeline (loading the 559 MB dataset
-included) runs in **2 seconds**; the pickled state is 612 bytes.
+included) runs in **2 seconds**; the pickled state is 708 bytes.
 
 An effective-temperature variant was tested and rejected: measured cell
 temperature deviates from the setpoint by +1.6 to +12.0 °C (self-heating,
@@ -232,8 +234,10 @@ the ranking is not sensitive to that choice.
 - **Beyond 58% SOH** the shape is unconstrained by data; the saturating tail
   is a safety device, not a prediction.
 - **No replicates**, so no cell-to-cell variance estimate. The GP nugget
-  assumes 3% scatter on `ln tau`; if siblings scatter more, the model is
-  slightly over-confident at the released conditions.
+  assumes 6% scatter on `ln tau` (between the 3% cross-validation prefers and
+  the ~6.6% measured within same-protocol replicate groups on public data);
+  if siblings scatter more, the model is slightly over-confident at the
+  released conditions.
 
 The evaluation harness that produced this table is not part of the submission
 (it needs the released cells as ground truth); it re-runs `fit()` and
@@ -245,8 +249,8 @@ from this model file plus the released dataset.
 ## 4. Running it
 
 ```bash
-python run_model.py --model train --input dataset      --output-dir output
-python run_model.py --model test  --input input.csv    --output-dir output
+python run_model.py --model train --input dataset/target --output-dir output
+python run_model.py --model test  --input input.csv       --output-dir output
 python validate_submission.py          # prints SUBMISSION READY
 ```
 
@@ -257,4 +261,7 @@ framework's `pandas`; nothing else. The only shipped artefact is
 any point.
 
 The dataset is not shipped with the submission: point `--input` at the folder
-containing the `102Ah_<T>degC_<C>_cell<N>` directories.
+containing the `102Ah_<T>degC_<C>_cell<N>` directories (locally,
+`./scripts/get_dataset.sh` fetches these into `dataset/target/`; the sibling
+`dataset/wheeler/`, `dataset/che/`, `dataset/catenaro/` hold the open
+pre-training sources from §0 and are not read by `run_model.py`).
