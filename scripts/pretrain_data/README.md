@@ -5,6 +5,11 @@ CSV que `scripts/pretrain.py` consomme. Les données brutes vont dans
 `dataset/<jeu>/` (un sous-dossier par source, à côté de `dataset/target/` qui
 contient les cellules cibles), jamais dans le dépôt.
 
+**Nouveau clone du dépôt ? `./scripts/get_all_data.sh`** enchaîne les 4 sources
+(cellules cibles + les 3 jeux publics ci-dessous) en une commande — pas besoin
+de connaître chaque script individuellement. `FULL=1` en plus pour les archives
+brutes complètes Wheeler/Catenaro (~26 Go, traçabilité seulement).
+
 | jeu | téléchargement | extraction | ce qu'on en tire |
 | --- | --- | --- | --- |
 | Che et al. 2023 | `get_che.sh` (260 Mo) | `build_che_csv.py` | **pente d'Arrhenius 2.58** → `my_model/pretrained.json` |
