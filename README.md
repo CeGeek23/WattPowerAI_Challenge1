@@ -6,7 +6,7 @@ point in 25-55 °C x 0.5-1.0 C, including combinations never observed.
 **Model**: one shared fade shape, one time scale per operating point
 (`my_model/model_template.py`), pre-trained on open cycling datasets and
 fine-tuned on the released 102 Ah cells. The pre-trained priors ship as
-`my_model/pretrained.json` (482 bytes, plain text, loaded offline).
+`my_model/pretrained.json` (plain text, loaded offline, no network).
 
 The exploratory analysis that motivated the model (notebook and evaluation
 harness) lives in the team repository and is not part of this submission; the
@@ -23,8 +23,8 @@ prismatic cell, and transferring the wrong quantity transfers noise.
 
 | dataset | cells | what transferred | what was rejected, and why |
 | --- | --- | --- | --- |
-| Wheeler et al. 2025 [1] | 20 LFP 18650 | **cell-to-cell scatter of ln τ ≈ 6.6%** (within true same-protocol replicate groups; pooling by nominal (T,C) without distinguishing protocols inflates this to ~16%) | fade shape: shared-shape RMSE **3.43** SOH points, the 7 protocols are not one family |
-| Che et al. 2023 [2] | 17 NMC pouch | **Arrhenius slope 2.58** (Ea ≈ 21 kJ/mol), from 25/35/55 °C | shape (RMSE 1.51, above the 1.5 gate); C-rate exponent **+1.51**, contradicted by the target cells (-0.06) |
+| Wheeler et al. 2025 [1] | 20 LFP 18650 | **cell-to-cell scatter of ln τ ≈ 6.6%** (within true same-protocol replicate groups; pooling by nominal (T,C) without distinguishing protocols inflates this to ~16%) | fade shape: shared-shape RMSE **3.52** SOH points, the 7 protocols are not one family |
+| Che et al. 2023 [2] | 17 NMC pouch | **Arrhenius slope 2.56** (Ea ≈ 21 kJ/mol), from 25/35/55 °C; and the **sign** of the temperature curvature | shape (median RMSE 1.48 but p90 **10.4** points - it describes half the cells and misses the rest); C-rate exponent **+1.51**, contradicted by the target cells (-0.06); the curvature *magnitude* (-7.19, chemistry-specific) |
 | Catenaro & Onori 2021 [3] | 18 (LFP/NCA/NMC) | **reversible capacity vs T** (LFP 1C: 94.9% at 5 °C, 100.1% at 25 °C, 101.8% at 35 °C), which justifies modelling a(T) | everything else: the dataset has **no ageing at all**, only 15-24 characterisation discharges per cell |
 
 Two of these numbers are things the released dataset **cannot** provide. It has
@@ -33,16 +33,21 @@ nugget, which was otherwise guesswork. And the initial-SOH rise with temperature
 is reversible kinetics, not ageing - Catenaro measures it independently, which is
 what licenses fitting a(T) rather than a single constant.
 
-The Arrhenius slope is the cleanest transfer: **2.58 measured on 17 NMC pouch
-cells against 2.81 fitted on the 6 target LFP cells**, two chemistries agreeing
-within 9%. It is shipped as the prior, so a reduced-budget run that cannot
+The Arrhenius slope is the cleanest transfer: **2.56 measured on 17 NMC pouch
+cells against 2.85 fitted on the 6 target LFP cells**, two chemistries agreeing
+within 11%. It is shipped as the prior, so a reduced-budget run that cannot
 identify the slope itself still gets a defensible one.
 
 `scripts/pretrain.py` regenerates `pretrained.json` and **refuses to export what
-it cannot justify**: the shape is exported only if the shared-shape fit stays
-under 1.5 SOH points on the public cells, the slope only if at least three
-temperatures are covered, the C exponent never. The rejection reasons are written
-into the file's `meta.ecarte` field.
+it cannot justify**. The slope needs at least three covered temperatures. The
+shape needs both a median shared-shape RMSE under 1.5 SOH points *and* a p90
+under 5: on Che the median is 1.48 but the p90 is 10.4, so the shape describes
+half the public cells and misses the other half - importing it degraded every
+truncated protocol (`loco-800` 0.49 -> 0.73), and it is rejected. The C exponent
+requires an LFP chemistry, which Che is not. The curvature is measured and
+recorded (`meta.curv_public`) but not exported, because only its sign transfers
+across chemistries - see §2. Every rejection reason is written into the file's
+`meta.ecarte` field, so the file states what it declined to carry and why.
 
 [1] Wheeler, W., Venet, P., Bultel, Y. & Sari, A. (2025). *Aging study on twenty
 A123 18650 Graphite/LFP 1.1 Ah cells*, V2, Recherche Data Gouv,
@@ -92,8 +97,8 @@ varies, not because the physics does.
 
 **Temperature and C-rate act on the time scale, not on the shape - and the
 temperature response is not monotone.** Fitted time scales (cycles per unit
-of reduced time): 1392 at 25 °C/0.5C, 1228 at 25 °C/1C, 1299 at 35 °C/1C,
-831 at 45 °C/0.5C, 890 at 45 °C/1C, 507 at 55 °C/1C. Ageing is *slowest*
+of reduced time): 1370 at 25 °C/0.5C, 1192 at 25 °C/1C, 1286 at 35 °C/1C,
+813 at 45 °C/0.5C, 875 at 45 °C/1C, 495 at 55 °C/1C. Ageing is *slowest*
 around 35 °C, not at the cold end, and the C-rate effect changes sign with
 temperature (1C ages ~13% faster at 25 °C, ~7% slower at 45 °C). With one
 cell per condition, part of that inversion may be cell-to-cell scatter; the
@@ -125,9 +130,10 @@ life contributing all of its data, which is what makes this safe under the
 reduced-budget replay (it improves every truncated protocol; see §3).
 
 **Starting SOH `a(T)`.** SOH starts above 100 - the cells exceed the 102 Ah
-nominal - and it rises slightly with temperature (+0.58 point across 25-55 °C,
-r = +0.48). That is reversible kinetics, not ageing, which Catenaro & Onori
-measure independently on LFP. Modelling it as a ridged linear function of
+nominal - and it rises slightly with temperature (+0.39 point across 25-55 °C
+as shipped, shrunk by the ridge from a raw spread of 1.45 points). That is
+reversible kinetics, not ageing, which Catenaro & Onori measure independently
+on LFP. Modelling it as a ridged linear function of
 1000/T rather than a single constant is worth 2.6% on leave-one-out; the ridge
 collapses it back to a constant when the grid cannot identify a slope.
 
@@ -139,10 +145,20 @@ measured within true same-protocol replicate groups on the public replicates
 (pooling across protocols that merely share a nominal (T,C) inflates this to
 ~16%) - cross-validation cannot see that scatter, since the
 released grid has no replicates at all. The fitted
-trend gives an apparent activation energy of 23.0 kJ/mol. The quadratic term
-lets the data express the non-monotone temperature response; its prior is
-zero (plain Arrhenius) and *forcing* a curvature in was tested and clearly
-hurt (mean relative RMSE 0.55 -> 1.08), so it stays data-driven.
+trend gives an apparent activation energy of 23.7 kJ/mol.
+
+The quadratic term carries the non-monotone temperature response, and it is the
+one place where a *sign* transfers from open data. At 1C the target's own time
+scale is longer at 35 °C (1286 cycles) than at 25 °C (1192): a pure Arrhenius
+cannot represent that optimum. Two independent estimates say the curvature is
+negative - the six target cells converge to -1.37 on their own with a zero
+prior, and Che's 17 cells give -7.19 through `scripts/pretrain.py`. The
+magnitude does not transfer across chemistries and the ridge on this term is
+too weak to correct an imported one, so the prior is set between the two
+estimates (-3.0) rather than to either. It matters most exactly where the term
+is not identifiable, i.e. under reduced budget: against a zero prior it moves
+`deep` 0.73 -> 0.66, `loco-800` 0.49 -> 0.41 and `deep-800` 0.69 -> 0.56, with
+`loco-400` the only protocol that regresses (0.62 -> 0.63).
 
 **The knee position is marginalised, not asserted.** Under squared-error loss
 the optimal prediction is not the best-fit curve but its expectation, and a
@@ -247,26 +263,26 @@ data-efficiency rerun, which cuts both cycles and cells.
 
 | Protocol | ratio of means | mean of per-cell ratios | worst cell | abs. RMSE (SOH pts) |
 | --- | --- | --- | --- | --- |
-| In-sample (sibling proxy) | **0.24** | 0.24 | 0.39 | 0.67 vs 2.76 |
-| Leave-one-condition-out | **0.49** | 0.49 | 1.38 | 2.10 vs 4.27 |
-| `profond` (deep cells, full life) | **0.56** | 0.67 | 1.38 | 3.03 vs 5.37 |
-| `deep` (SOH <= 80) | **0.73** | 1.01 | 2.32 | 5.75 vs 7.88 |
-| LOCO, cycles <= 800 | 0.49 | 0.54 | 0.98 | 1.81 vs 3.67 |
-| LOCO, cycles <= 400 | 0.62 | 0.50 | 1.20 | 4.31 vs 6.99 |
-| `deep`, cycles <= 800 | 0.69 | 0.76 | 1.36 | 4.78 vs 6.96 |
-| Two training cells (15 pairs) | 0.78 | 1.07 | 9.92 | 3.99 vs 5.12 |
-| One training cell (6 folds) | 0.69 | 1.28 | 14.05 | 4.21 vs 6.09 |
+| In-sample (sibling proxy) | **0.25** | 0.24 | 0.38 | 0.68 vs 2.76 |
+| Leave-one-condition-out | **0.45** | 0.45 | 1.26 | 1.91 vs 4.27 |
+| `profond` (deep cells, full life) | **0.51** | 0.63 | 1.26 | 2.75 vs 5.37 |
+| `deep` (SOH <= 80) | **0.66** | 0.98 | 2.12 | 5.23 vs 7.88 |
+| LOCO, cycles <= 800 | 0.41 | 0.46 | 0.83 | 1.52 vs 3.67 |
+| LOCO, cycles <= 400 | 0.63 | 0.57 | 1.24 | 4.40 vs 6.99 |
+| `deep`, cycles <= 800 | 0.56 | 0.64 | 1.27 | 3.91 vs 6.96 |
+| Two training cells (15 pairs) | 0.68 | 0.89 | 7.64 | 3.46 vs 5.12 |
+| One training cell (6 folds) | 0.58 | 1.01 | 10.86 | 3.53 vs 6.09 |
 
-Per-condition leave-one-out RMSE (SOH points): 0.17 at 25 °C/0.5C, 3.34 at
-25 °C/1C, 3.69 at 35 °C/1C, 1.49 at 45 °C/0.5C, 0.30 at 45 °C/1C, 3.58 at
-55 °C/1C - mean 2.10 against 4.27 for the baseline.
+Per-condition leave-one-out RMSE (SOH points): 0.14 at 25 °C/0.5C, 2.98 at
+25 °C/1C, 3.37 at 35 °C/1C, 2.13 at 45 °C/0.5C, 0.32 at 45 °C/1C, 2.52 at
+55 °C/1C - mean 1.91 against 4.27 for the baseline.
 
 The two rows that matter most are `profond` and `deep`, and the honest reading
-is that the knee is still the weak spot: 0.73 there against 0.49 over the full
-trajectory. Per cell in the knee window the model is at 0.54, 0.67 and 0.51 on
-25 °C/1C, 45 °C/0.5C and 55 °C/1C, but **2.32 on 35 °C/1C** - the anomalously
+is that the knee is still the weak spot: 0.66 there against 0.45 over the full
+trajectory. Per cell in the knee window the model is at 0.49, 0.95 and 0.36 on
+25 °C/1C, 45 °C/0.5C and 55 °C/1C, but **2.12 on 35 °C/1C** - the anomalously
 slow-ageing condition, which cannot be recovered by interpolating its
-neighbours. That single cell is the whole gap between 0.73 and ~0.57.
+neighbours. That single cell is the whole gap between 0.66 and ~0.50.
 
 The two- and one-cell rows have a large *worst cell* because a single training
 condition cannot identify the tau law at all; the means stay below the baseline.
@@ -292,14 +308,13 @@ monotonically, and was rejected for that reason.
   runs. With one cell per condition it is impossible to tell a real
   temperature optimum from cell-to-cell scatter.
 - **35 °C is also where the knee-region score is lost.** In the `deep` window
-  the model is at 0.54, 0.67 and 0.51 on the other three deep cells but 2.32
+  the model is at 0.49, 0.95 and 0.36 on the other three deep cells but 2.12
   there. Marginalising the knee position helps the three and cannot help this
   one, because the error is a *biased* time scale, not an uncertain one.
 - **A single training condition cannot identify the tau law**, so the one- and
-  two-cell replays have a large worst cell (14.0 and 9.9) even though their
-  means stay below the baseline (0.69 and 0.78). Averaged over all 15 pairs the
-  model is at 3.99 against 5.12; the weakest pair is 25 °C/1C + 45 °C/0.5C
-  (3.48 vs 4.12, still a win), the strongest 35 °C/1C + 55 °C/1C (1.62 vs 3.55).
+  two-cell replays have a large worst cell (10.9 and 7.6) even though their
+  means stay below the baseline (0.58 and 0.68). Averaged over all 15 pairs the
+  model is at 3.46 against 5.12.
 - **Beyond 58% SOH** the shape is unconstrained by data; the saturating tail
   is a safety device, not a prediction.
 - **No replicates**, so no cell-to-cell variance estimate. The GP nugget

@@ -34,7 +34,20 @@ C_EXP_PRIOR = -0.15              # tau ~ C**-0.15: higher current ages slightly 
 # tested: Wheeler et al. 2025's fitted C-exponent (+0.15, LFP, 6x wider C-range
 # than target's 0.5-1.0C) helps full LOCO (2.463->2.278) but hurts loco-800/
 # loco-400 monotonically (1.906->2.416, 4.957->5.620) - rejected.
-CURV_PRIOR = 0.0                 # d2 ln(tau) / d(1000/T_K)2
+
+# La reponse en temperature n'est pas un Arrhenius pur : a 1C, tau(35 degC) est
+# plus LONG que tau(25 degC) (1192 contre 1286 cycles), un optimum que seule la
+# courbure peut representer. Deux estimations independantes la disent negative :
+# les 6 cellules cibles convergent d'elles-memes vers -1.37 quand le prior est
+# nul, et les 17 cellules Che donnent -7.19 par scripts/pretrain.py. Le signe
+# transfere, pas la magnitude (chimie differente), donc on retient une valeur
+# entre les deux plutot que l'une des deux. Le prior porte la ou le terme n'est
+# pas identifiable -- c'est-a-dire en budget reduit, et c'est la qu'il rapporte
+# le plus. Mesure contre 0.0 : deep 0.729 -> 0.663, loco 0.490 -> 0.446,
+# profond 0.564 -> 0.512, loco-800 0.493 -> 0.414, deep-800 0.687 -> 0.562,
+# paires 0.779 -> 0.674, solo 0.691 -> 0.579 ; seul loco-400 recule
+# (0.617 -> 0.631). 8 protocoles sur 9 gagnent.
+CURV_PRIOR = -3.0                # d2 ln(tau) / d(1000/T_K)2
 PRETRAINED = {}
 
 

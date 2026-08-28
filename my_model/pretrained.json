@@ -7,14 +7,16 @@
   "chemistries": [
    "NMC_pouch"
   ],
+  "curv_public": -7.1948,
   "ecarte": [
-   "forme (RMSE mediane 1.51 > 1.5)",
-   "exposant C (protocoles publics non comparables)"
+   "forme (RMSE p90 10.4 > 5.0 : mediane 1.48 correcte mais queue inutilisable)",
+   "courbure (valeur publique -7.19 : signe retenu, magnitude specifique a la chimie, cf. CURV_PRIOR)",
+   "exposant C (chimie ['NMC_pouch'] != LFP, protocoles non comparables a la cible)"
   ],
   "n_cells": 17,
   "rmse_forme_partagee": {
-   "median": 1.511,
-   "p90": 10.27
+   "median": 1.479,
+   "p90": 10.433
   },
   "sources": [
    "che2023_Dataset1",
@@ -28,5 +30,5 @@
    55.0
   ]
  },
- "slope": 2.5753071174263265
+ "slope": 2.5562628529639784
 }

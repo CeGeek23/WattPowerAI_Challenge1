@@ -26,6 +26,7 @@ COLS = ["source", "cell_id", "chemistry", "nominal_Ah", "T_degC",
 MIN_POINTS = 20
 MIN_FADE = 3.0          # points de SOH perdus, sinon la cellule ne dit rien de la forme
 RMSE_FORME_MAX = 1.5    # au-dela, la forme publique ne decrit pas ces cellules : on ne l'exporte pas
+RMSE_FORME_P90_MAX = 5.0  # et il faut aussi une queue utilisable, pas seulement une mediane
 N_TEMPS_MIN = 3         # temperatures distinctes requises pour exporter une pente d'Arrhenius
 N_CELLS_CURV_MIN = 4    # + N_TEMPS_MIN temperatures : meme seuil d'identifiabilite que
                         # MyModel._fit_law pour le terme de courbure (n_T>=3 et n>=4)
@@ -131,18 +132,33 @@ def main():
     temps = sorted({c.temperature_degC for c in cells})
     crates = sorted({c.c_rate for c in cells})
 
-    med = float(np.median(err))
+    med, p90 = float(np.median(err)), float(np.percentile(err, 90))
     poids, ecarte = {}, []
-    if med <= RMSE_FORME_MAX:
+    # La mediane seule ne suffit pas : sur Che elle vaut 1.48 (sous le seuil)
+    # alors que le p90 vaut 10.4 points de SOH -- une forme qui decrit la moitie
+    # des cellules et rate l'autre completement. Importee, elle degrade tous les
+    # rejeux tronques (loco-800 0.493 -> 0.729). On exige les deux.
+    if med <= RMSE_FORME_MAX and p90 <= RMSE_FORME_P90_MAX:
         poids["shape"] = [float(v) for v in modele.theta_]
-    else:
+    elif med > RMSE_FORME_MAX:
         ecarte.append(f"forme (RMSE mediane {med:.2f} > {RMSE_FORME_MAX})")
+    else:
+        ecarte.append(f"forme (RMSE p90 {p90:.1f} > {RMSE_FORME_P90_MAX} : "
+                      f"mediane {med:.2f} correcte mais queue inutilisable)")
     if len(temps) >= N_TEMPS_MIN:
         poids["slope"] = float(modele.w_[1])
     else:
         ecarte.append(f"pente Arrhenius ({len(temps)} temperature(s) seulement)")
     if len(temps) >= N_TEMPS_MIN and len(cells) >= N_CELLS_CURV_MIN:
-        poids["curv"] = float(modele.w_[3])
+        # Le SIGNE de la courbure transfere (Che et la cible sont negatifs tous
+        # les deux), pas sa MAGNITUDE : -7.2 sur NMC contre -1.4 ajuste sur la
+        # cible. Exporter la valeur publique telle quelle reviendrait a imposer
+        # un chiffre d'une autre chimie, le ridge sur ce terme etant trop faible
+        # pour que les donnees le corrigent. On la trace sans la livrer ;
+        # MyModel.CURV_PRIOR retient une valeur entre les deux estimations.
+        curv_public = float(modele.w_[3])
+        ecarte.append(f"courbure (valeur publique {curv_public:.2f} : signe retenu, "
+                      f"magnitude specifique a la chimie, cf. CURV_PRIOR)")
     else:
         ecarte.append(f"courbure ({len(temps)} temperature(s), {len(cells)} cellule(s) : "
                       f"seuil {N_TEMPS_MIN} temperatures et {N_CELLS_CURV_MIN} cellules)")
@@ -156,6 +172,9 @@ def main():
         ecarte.append(f"exposant C ({len(crates)} C-rate(s) seulement)")
     poids.update({
         "meta": {
+            "curv_public": (round(float(modele.w_[3]), 4)
+                            if len(temps) >= N_TEMPS_MIN and len(cells) >= N_CELLS_CURV_MIN
+                            else None),
             "ecarte": ecarte,
             "n_cells": len(cells),
             "sources": sorted(d.source.unique().tolist()),

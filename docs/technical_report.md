@@ -316,23 +316,23 @@ The scored window is the decisive choice here. The challenge asks for the
 trajectory "down to 70% SOH, including the knee-point", but three of the six
 released cells stop at 93.1%, 84.8% and 72.6% SOH. Scoring only where they
 happen to carry labels therefore measures mostly early life: it rates this
-model at 0.49 while the knee region rates it at 0.73. Both are reported, under
+model at 0.45 while the knee region rates it at 0.66. Both are reported, under
 three aggregations, since the official metric is a composite and unpublished.
 
 | Protocol | ratio of means | mean of per-cell ratios | worst cell |
 | --- | --- | --- | --- |
-| In-sample (sibling proxy) | **0.24** | 0.24 | 0.39 |
-| LOCO, all cycles | **0.49** | 0.49 | 1.38 |
-| `profond` (deep cells, full life) | **0.56** | 0.67 | 1.38 |
-| `deep` (SOH ≤ 80, the knee) | **0.73** | 1.01 | 2.32 |
-| LOCO, cycles ≤800 | 0.49 | 0.54 | 0.98 |
-| LOCO, cycles ≤400 | 0.62 | 0.50 | 1.20 |
-| `deep`, cycles ≤800 | 0.69 | 0.76 | 1.36 |
-| Two training cells (15 pairs) | 0.78 | 1.07 | 9.92 |
-| One training cell (6 folds) | 0.69 | 1.28 | 14.05 |
+| In-sample (sibling proxy) | **0.25** | 0.24 | 0.38 |
+| LOCO, all cycles | **0.45** | 0.45 | 1.26 |
+| `profond` (deep cells, full life) | **0.51** | 0.63 | 1.26 |
+| `deep` (SOH ≤ 80, the knee) | **0.66** | 0.98 | 2.12 |
+| LOCO, cycles ≤800 | 0.41 | 0.46 | 0.83 |
+| LOCO, cycles ≤400 | 0.63 | 0.57 | 1.24 |
+| `deep`, cycles ≤800 | 0.56 | 0.64 | 1.27 |
+| Two training cells (15 pairs) | 0.68 | 0.89 | 7.64 |
+| One training cell (6 folds) | 0.58 | 1.01 | 10.86 |
 
-Absolute per-condition LOCO RMSE (SOH points): 0.17 (25 °C/0.5C), 3.34
-(25 °C/1C), 3.69 (35 °C/1C), 1.49 (45 °C/0.5C), 0.30 (45 °C/1C), 3.58
+Absolute per-condition LOCO RMSE (SOH points): 0.14 (25 °C/0.5C), 2.98
+(25 °C/1C), 3.37 (35 °C/1C), 2.13 (45 °C/0.5C), 0.32 (45 °C/1C), 2.52
 (55 °C/1C) — mean 2.46 against 4.28 for the baseline. In-sample mean: 0.66
 against 2.76 for the baseline.
 
@@ -349,8 +349,8 @@ relative RMSE.
   impossible to separate a real temperature optimum from cell-to-cell
   scatter.
 - **Two training cells only** (25 °C/1C + 45 °C/0.5C) is the one scenario
-  where the model is weakest (3.48 vs 4.12 for the baseline — still a win;
-  an earlier draft reported 4.97 vs 3.55 here, which did not reproduce). The
+  where the model is weakest (still a win against the baseline; an earlier
+  draft reported 4.97 vs 3.55 here, which did not reproduce). The
   reverse pair (35 °C/1C + 55 °C/1C, which shares a C-rate) wins clearly
   (1.62 vs 3.55) — see the ablation analysis below for the mechanism.
 - **Beyond 58% SOH**, the shape is unconstrained by any target-cell data;
