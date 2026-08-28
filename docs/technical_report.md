@@ -316,23 +316,23 @@ The scored window is the decisive choice here. The challenge asks for the
 trajectory "down to 70% SOH, including the knee-point", but three of the six
 released cells stop at 93.1%, 84.8% and 72.6% SOH. Scoring only where they
 happen to carry labels therefore measures mostly early life: it rates this
-model at 0.45 while the knee region rates it at 0.66. Both are reported, under
+model at 0.39 while the knee region rates it at 0.59. Both are reported, under
 three aggregations, since the official metric is a composite and unpublished.
 
 | Protocol | ratio of means | mean of per-cell ratios | worst cell |
 | --- | --- | --- | --- |
-| In-sample (sibling proxy) | **0.25** | 0.24 | 0.38 |
-| LOCO, all cycles | **0.45** | 0.45 | 1.26 |
-| `profond` (deep cells, full life) | **0.51** | 0.63 | 1.26 |
-| `deep` (SOH ≤ 80, the knee) | **0.66** | 0.98 | 2.12 |
-| LOCO, cycles ≤800 | 0.41 | 0.46 | 0.83 |
-| LOCO, cycles ≤400 | 0.63 | 0.57 | 1.24 |
-| `deep`, cycles ≤800 | 0.56 | 0.64 | 1.27 |
-| Two training cells (15 pairs) | 0.68 | 0.89 | 7.64 |
+| In-sample (sibling proxy) | **0.27** | 0.26 | 0.40 |
+| LOCO, all cycles | **0.39** | 0.41 | 1.32 |
+| `profond` (deep cells, full life) | **0.44** | 0.57 | 1.32 |
+| `deep` (SOH ≤ 80, the knee) | **0.59** | 0.89 | 2.22 |
+| LOCO, cycles ≤800 | 0.40 | 0.44 | 0.83 |
+| LOCO, cycles ≤400 | 0.64 | 0.58 | 1.29 |
+| `deep`, cycles ≤800 | 0.54 | 0.60 | 1.30 |
+| Two training cells (15 pairs) | 0.67 | 0.89 | 7.64 |
 | One training cell (6 folds) | 0.58 | 1.01 | 10.86 |
 
-Absolute per-condition LOCO RMSE (SOH points): 0.14 (25 °C/0.5C), 2.98
-(25 °C/1C), 3.37 (35 °C/1C), 2.13 (45 °C/0.5C), 0.32 (45 °C/1C), 2.52
+Absolute per-condition LOCO RMSE (SOH points): 0.13 (25 °C/0.5C), 2.67
+(25 °C/1C), 3.53 (35 °C/1C), 1.31 (45 °C/0.5C), 0.32 (45 °C/1C), 2.02
 (55 °C/1C) — mean 2.46 against 4.28 for the baseline. In-sample mean: 0.66
 against 2.76 for the baseline.
 

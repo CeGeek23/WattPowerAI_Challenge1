@@ -101,6 +101,18 @@ _GH_W = _GH_W / np.sqrt(np.pi)
 # a suivi une cellule assez loin dans le fade. Inerte a budget plein (profondeur
 # 37-44 points), actif seulement sur les rejeux tronques.
 KNEE_DEPTH = 20.0                # points de SOH suivis requis pour marginaliser
+# Les coefficients de la tendance sont eux-memes estimes sur 5 ou 6 cellules et
+# traites comme exacts jusqu'ici. tau = exp(phi @ w), donc leur incertitude est
+# exactement un terme de variance de plus sur ln tau : forme fermee, meme
+# quadrature, aucun cout. Pris en entier il porte kappa de 0.97 a 0.69 (on
+# flouterait au-dela de ce que la dispersion de tau justifie, la largeur servant
+# alors surtout a couvrir l'erreur de forme). A moitie, kappa reste a 0.79 et on
+# garde l'essentiel : deep 0.664 -> 0.585, loco 0.447 -> 0.389, profond 0.513 ->
+# 0.444, loco-800 0.414 -> 0.400, deep-800 0.562 -> 0.544. Cout : in-sample
+# 0.247 -> 0.267, mais ce proxy note contre la cellule meme qui a servi au fit,
+# donc sans dispersion entre soeurs -- il sous-estime structurellement l'interet
+# de flouter. loco-400 recule de 0.630 a 0.638.
+TREND_VAR_W = 0.5                # part de la variance des coefficients retenue
 
 # Le SOH de depart monte legerement avec T : capacite cinetique reversible, pas du
 # vieillissement (Catenaro & Onori 2021 : +1.7 point de 25 a 35 degC sur LFP ; ici
@@ -160,6 +172,7 @@ class MyModel:
         self.gp_z_ = np.zeros((0, 2))
         self.gp_alpha_ = np.zeros(0)
         self.gp_kinv_ = None
+        self.cov_w_ = np.zeros((4, 4))
         self.n_cells_ = 0
         self.fade_depth_ = 0.0
 
@@ -316,6 +329,18 @@ class MyModel:
             self.gp_kinv_ = np.linalg.inv(K + nugget)
         except np.linalg.LinAlgError:
             self.gp_kinv_ = None
+        # Incertitude sur les coefficients de la tendance eux-memes : 4 termes
+        # estimes sur 5 ou 6 cellules. tau = exp(phi @ w), donc perturber w
+        # revient exactement a ajouter phi @ COV @ phi a la variance de ln tau --
+        # meme quadrature, aucun tirage. Les termes epingles par les portes
+        # d'identifiabilite sont des priors fixes : variance nulle.
+        self.cov_w_ = np.zeros((4, 4))
+        ddl = max(len(ln_tau) - int(free.sum()), 1)
+        try:
+            cov = (float(resid @ (W @ resid)) / ddl) * np.linalg.inv(Xf.T @ W @ Xf + lam)
+            self.cov_w_[np.ix_(free, free)] = 0.5 * (cov + cov.T)
+        except np.linalg.LinAlgError:
+            pass
 
     def _tau(self, T, C):
         x, lc = _features(np.atleast_1d(T), np.atleast_1d(C))
@@ -337,6 +362,10 @@ class MyModel:
             z = np.array([x[0] / GP_ELL_X, lc[0] / GP_ELL_C])
             k = GP_SIGMA_F ** 2 * np.exp(-0.5 * ((z - self.gp_z_) ** 2).sum(-1))
             v = max(GP_SIGMA_F ** 2 - float(k @ kinv @ k), 0.0)
+        cov = getattr(self, "cov_w_", None)
+        if cov is not None:
+            phi = np.array([1.0, x[0], lc[0], x[0] ** 2])
+            v += TREND_VAR_W * max(float(phi @ cov @ phi), 0.0)
         s = np.sqrt(v + GP_SIGMA_N ** 2)
         s *= min(1.0, float(getattr(self, "fade_depth_", 0.0)) / KNEE_DEPTH)
         return float(s) if np.isfinite(s) else 0.0

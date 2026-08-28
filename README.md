@@ -172,7 +172,20 @@ term. It is not a tuned knob: it is 0.08 at the released conditions, 0.10 at
 30 °C/0.7C and 0.14-0.17 in the two grid holes (35 °C and 55 °C at 0.5C), so
 the curve is blurred only where the model genuinely does not know. Checked
 against the six leave-one-out residuals, `sqrt(mean(z^2)) = 1.01` with
-`z = residual/s` - calibrated, with nothing fitted to make it so. The blur is
+`z = residual/s` - calibrated, with nothing fitted to make it so.
+
+`s` also carries the uncertainty of the trend coefficients themselves: four
+terms fitted on five or six cells, previously treated as exact. Because
+`tau = exp(phi . w)`, that uncertainty is *exactly* one more variance term on
+`ln tau` - closed form, same quadrature, no extra cost and no sampling. Taken
+whole it takes the calibration ratio from 0.97 to 0.69, i.e. wider than the
+scatter of `tau` alone justifies, so half of it is used (`TREND_VAR_W = 0.5`,
+ratio 0.79). That half is worth `deep` 0.66 -> 0.59, `loco` 0.45 -> 0.39 and
+`profond` 0.51 -> 0.44, against `in-sample` 0.25 -> 0.27 - and that last cost
+is largely an artefact of the proxy, which scores against the very cell that
+was fitted and therefore contains no sibling scatter at all.
+
+The blur is
 switched off when the training set never reached the knee (fade depth < 20 SOH
 points), because smearing the position of a knee whose shape is still a prior
 adds variance without information; that gate is inert at full budget and is
@@ -263,26 +276,26 @@ data-efficiency rerun, which cuts both cycles and cells.
 
 | Protocol | ratio of means | mean of per-cell ratios | worst cell | abs. RMSE (SOH pts) |
 | --- | --- | --- | --- | --- |
-| In-sample (sibling proxy) | **0.25** | 0.24 | 0.38 | 0.68 vs 2.76 |
-| Leave-one-condition-out | **0.45** | 0.45 | 1.26 | 1.91 vs 4.27 |
-| `profond` (deep cells, full life) | **0.51** | 0.63 | 1.26 | 2.75 vs 5.37 |
-| `deep` (SOH <= 80) | **0.66** | 0.98 | 2.12 | 5.23 vs 7.88 |
-| LOCO, cycles <= 800 | 0.41 | 0.46 | 0.83 | 1.52 vs 3.67 |
-| LOCO, cycles <= 400 | 0.63 | 0.57 | 1.24 | 4.40 vs 6.99 |
-| `deep`, cycles <= 800 | 0.56 | 0.64 | 1.27 | 3.91 vs 6.96 |
-| Two training cells (15 pairs) | 0.68 | 0.89 | 7.64 | 3.46 vs 5.12 |
+| In-sample (sibling proxy) | **0.27** | 0.26 | 0.40 | 0.74 vs 2.76 |
+| Leave-one-condition-out | **0.39** | 0.41 | 1.32 | 1.66 vs 4.27 |
+| `profond` (deep cells, full life) | **0.44** | 0.57 | 1.32 | 2.38 vs 5.37 |
+| `deep` (SOH <= 80) | **0.59** | 0.89 | 2.22 | 4.61 vs 7.88 |
+| LOCO, cycles <= 800 | 0.40 | 0.44 | 0.83 | 1.47 vs 3.67 |
+| LOCO, cycles <= 400 | 0.64 | 0.58 | 1.29 | 4.46 vs 6.99 |
+| `deep`, cycles <= 800 | 0.54 | 0.60 | 1.30 | 3.79 vs 6.96 |
+| Two training cells (15 pairs) | 0.67 | 0.89 | 7.64 | 3.44 vs 5.12 |
 | One training cell (6 folds) | 0.58 | 1.01 | 10.86 | 3.53 vs 6.09 |
 
-Per-condition leave-one-out RMSE (SOH points): 0.14 at 25 °C/0.5C, 2.98 at
-25 °C/1C, 3.37 at 35 °C/1C, 2.13 at 45 °C/0.5C, 0.32 at 45 °C/1C, 2.52 at
-55 °C/1C - mean 1.91 against 4.27 for the baseline.
+Per-condition leave-one-out RMSE (SOH points): 0.13 at 25 °C/0.5C, 2.67 at
+25 °C/1C, 3.53 at 35 °C/1C, 1.31 at 45 °C/0.5C, 0.32 at 45 °C/1C, 2.02 at
+55 °C/1C - mean 1.66 against 4.27 for the baseline.
 
 The two rows that matter most are `profond` and `deep`, and the honest reading
-is that the knee is still the weak spot: 0.66 there against 0.45 over the full
-trajectory. Per cell in the knee window the model is at 0.49, 0.95 and 0.36 on
-25 °C/1C, 45 °C/0.5C and 55 °C/1C, but **2.12 on 35 °C/1C** - the anomalously
+is that the knee is still the weak spot: 0.59 there against 0.39 over the full
+trajectory. Per cell in the knee window the model is at 0.44, 0.59 and 0.29 on
+25 °C/1C, 45 °C/0.5C and 55 °C/1C, but **2.22 on 35 °C/1C** - the anomalously
 slow-ageing condition, which cannot be recovered by interpolating its
-neighbours. That single cell is the whole gap between 0.66 and ~0.50.
+neighbours. That single cell is the whole gap between 0.59 and ~0.42.
 
 The two- and one-cell rows have a large *worst cell* because a single training
 condition cannot identify the tau law at all; the means stay below the baseline.
@@ -308,7 +321,7 @@ monotonically, and was rejected for that reason.
   runs. With one cell per condition it is impossible to tell a real
   temperature optimum from cell-to-cell scatter.
 - **35 °C is also where the knee-region score is lost.** In the `deep` window
-  the model is at 0.49, 0.95 and 0.36 on the other three deep cells but 2.12
+  the model is at 0.44, 0.59 and 0.29 on the other three deep cells but 2.22
   there. Marginalising the knee position helps the three and cannot help this
   one, because the error is a *biased* time scale, not an uncertain one.
 - **A single training condition cannot identify the tau law**, so the one- and
