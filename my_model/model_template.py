@@ -73,11 +73,34 @@ GP_ELL_X = 0.12                  # correlation length in 1000/T_K (~12 degC)
 GP_ELL_C = 0.80                  # correlation length in ln C (~ the whole range)
 GP_CAP = 0.30                    # a condition may not depart from the trend by >35%
 
+# Sous perte quadratique la prediction optimale n'est pas la courbe du meilleur
+# ajustement mais son esperance. Un knee net au mauvais endroit coute enormement ;
+# en LOCO l'erreur sur le cycle a 70% atteint +31%, alors que le modele se croyait
+# precis a 6%. On integre donc sur ln tau ~ N(ln tau, s^2), s etant l'ecart-type a
+# posteriori du GP (~0.08 sur la grille, ~0.17 dans les trous) plus la dispersion
+# entre cellules soeurs. Verifie sans aucun reglage : sur les 6 plis LOCO,
+# sqrt(mean(z^2)) = 1.01 avec z = residu/s -- la largeur est calibree, pas ajustee.
+GH_NODES = 15                    # quadrature de Gauss-Hermite, erreur 0.007 point de SOH
+_GH_X, _GH_W = np.polynomial.hermite.hermgauss(GH_NODES)
+_GH_W = _GH_W / np.sqrt(np.pi)
+# Flouter la position d'un knee dont la FORME est encore un prior ajoute de la
+# variance sans information : on n'active la marginalisation que si l'entrainement
+# a suivi une cellule assez loin dans le fade. Inerte a budget plein (profondeur
+# 37-44 points), actif seulement sur les rejeux tronques.
+KNEE_DEPTH = 20.0                # points de SOH suivis requis pour marginaliser
+
 # Le SOH de depart monte legerement avec T : capacite cinetique reversible, pas du
 # vieillissement (Catenaro & Onori 2021 : +1.7 point de 25 a 35 degC sur LFP ; ici
 # +0.58 point sur 25-55 degC). Pente fortement contrainte.
 A_RIDGE = 0.03                   # shrinkage de la pente de a(T) : garde ~70% de la pente
 DEPTH_REF = 5.0                  # SOH points a cell must lose for a solid tau estimate
+# poids plancher du debut de vie dans le fit de forme, relatif au point le plus
+# profond de la cellule (1.0 = ponderation uniforme, l'ancien comportement).
+# 0.8 mesure : loco-400 0.710 -> 0.602, loco-800 0.519 -> 0.513, deep-800 0.727
+# -> 0.713 (pire cellule 1.52 -> 1.28), pour +0.003 sur loco/profond/deep.
+# Plus bas creuse encore loco-400 (0.43 a 0.5) mais degrade alors loco-800 et
+# deep-800 : 0.8 est le point ou tous les protocoles budget reduit gagnent.
+DEPTH_FLOOR = 0.8
 # past the knee: saturate instead of free-falling onto the clipping floor
 SOH_FLOOR = 20.0                 # asymptote of the trajectory
 CAP_SHARP = 8.0                  # sharpness of that saturation
@@ -123,6 +146,7 @@ class MyModel:
         self.wa_ = None
         self.gp_z_ = np.zeros((0, 2))
         self.gp_alpha_ = np.zeros(0)
+        self.gp_kinv_ = None
         self.n_cells_ = 0
         self.fade_depth_ = 0.0
 
@@ -197,6 +221,17 @@ class MyModel:
         a0 = np.array([np.percentile(y, 99.5) for *_, y in curves])
         # each cell is normalised to weight 1, so the prior weight is in "cells"
         wts = [1.0 / np.sqrt(len(n)) for *_, n, _ in curves]
+        # A cell has thousands of labels above 90% SOH and a few hundred in the
+        # knee, so uniform weighting fits the shape to early life and extrapolates
+        # it into the knee - which is the part that gets scored. Weight each point
+        # by its fade depth RELATIVE to that cell's own deepest point, floored so a
+        # cell that was only followed through early life still contributes all of
+        # its data. Total weight per cell is preserved, so cells stay balanced.
+        wp = []
+        for _, _, _, y in curves:
+            d = np.clip(np.percentile(y, 99.5) - y, 0.0, None)
+            u = DEPTH_FLOOR + (1.0 - DEPTH_FLOOR) * d / max(d.max(), 1.0)
+            wp.append(u / np.sqrt(np.mean(u ** 2)))
         tau0 = np.array([max(np.median(n), 50.0) for *_, n, _ in curves])
         p0 = np.concatenate([TH_PRIOR, a0, np.log(tau0)])
         lo = np.concatenate([TH_LO, np.full(m, 99.0), np.full(m, np.log(TAU_LO))])
@@ -205,7 +240,7 @@ class MyModel:
         def residuals(p):
             theta, a, ln_tau = p[:4], p[4:4 + m], p[4 + m:]
             parts = [(a[i] - fade_shape(curves[i][2] / np.exp(ln_tau[i]), theta)
-                      - curves[i][3]) * wts[i] for i in range(m)]
+                      - curves[i][3]) * wts[i] * wp[i] for i in range(m)]
             parts.append(TH_PRIOR_W * (theta - TH_PRIOR) / TH_SCALE)
             return np.concatenate(parts)
 
@@ -264,6 +299,10 @@ class MyModel:
             alpha = np.zeros(len(resid))
         self.gp_z_ = z
         self.gp_alpha_ = alpha if np.all(np.isfinite(alpha)) else np.zeros(len(resid))
+        try:                                  # variance a posteriori : jamais calculee
+            self.gp_kinv_ = np.linalg.inv(K + nugget)
+        except np.linalg.LinAlgError:
+            self.gp_kinv_ = None
 
     def _tau(self, T, C):
         x, lc = _features(np.atleast_1d(T), np.atleast_1d(C))
@@ -275,6 +314,19 @@ class MyModel:
         if not np.isfinite(ln_tau):
             ln_tau = LN_TAU_PRIOR
         return float(np.clip(np.exp(ln_tau), TAU_LO, TAU_HI))
+
+    def _s_ln_tau(self, T, C):
+        """Ecart-type a posteriori de ln tau : variance du GP + dispersion soeurs."""
+        x, lc = _features(np.atleast_1d(T), np.atleast_1d(C))
+        v = GP_SIGMA_F ** 2                   # loin de tout: on retombe sur le prior
+        kinv = getattr(self, "gp_kinv_", None)
+        if kinv is not None and len(self.gp_z_):
+            z = np.array([x[0] / GP_ELL_X, lc[0] / GP_ELL_C])
+            k = GP_SIGMA_F ** 2 * np.exp(-0.5 * ((z - self.gp_z_) ** 2).sum(-1))
+            v = max(GP_SIGMA_F ** 2 - float(k @ kinv @ k), 0.0)
+        s = np.sqrt(v + GP_SIGMA_N ** 2)
+        s *= min(1.0, float(getattr(self, "fade_depth_", 0.0)) / KNEE_DEPTH)
+        return float(s) if np.isfinite(s) else 0.0
 
     # -------------------------------------------------------------- predict
     def predict_soh(self, temperature_degC, c_rate):
@@ -290,7 +342,16 @@ class MyModel:
             C = C_REF
         n = np.arange(1, N_CYCLES + 1, dtype=float)
         a = self._a(T, C)
-        soh = a - fade_shape(n / self._tau(T, C), self.theta_, cap=a - SOH_FLOOR)
+        tau, cap = self._tau(T, C), a - SOH_FLOOR
+        s = self._s_ln_tau(T, C)
+        if s <= 1e-6:                             # rien a marginaliser : estimation ponctuelle
+            perte = fade_shape(n / tau, self.theta_, cap=cap)
+        else:                                     # E[L(n/tau)], optimal en erreur quadratique
+            perte = np.zeros_like(n)              # cap applique DANS chaque noeud, sinon la
+            for xi, wi in zip(_GH_X, _GH_W):      # moyenne de queue passe sous le plancher
+                perte += wi * fade_shape(n / (tau * np.exp(np.sqrt(2.0) * s * xi)),
+                                         self.theta_, cap=cap)
+        soh = a - perte
         soh = np.where(np.isfinite(soh), soh, SOH_LO)
         soh = np.minimum.accumulate(soh)          # degradation never recovers
         return np.clip(soh, SOH_LO, SOH_HI)
