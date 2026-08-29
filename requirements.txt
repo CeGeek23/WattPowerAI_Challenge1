@@ -16,6 +16,8 @@
 numpy>=1.24                # modele + framework
 pandas>=2.0                # lecture du dataset par framework/data.py
 scipy>=1.10                # moindres carres non lineaires, filtre median
+missingno
+kneed
 
 # ===========================================================================
 #  OUTILLAGE LOCAL - volontairement commente, ne pas livrer.
